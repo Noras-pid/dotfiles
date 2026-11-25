@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+export PATH="$HOME/.local/bin:$PATH"
+exec "$HOME/.local/opt/revenv/bin/python" "$HOME/.local/opt/revscripts/rev-find-str" "$@"

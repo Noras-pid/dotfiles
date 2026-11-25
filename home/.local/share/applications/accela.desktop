@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=2.0
+Name=ACCELA
+Comment=ＧｏＤ_Ｉｓ_ｉＮ_ｔＨｅ_ＷｉＲｅＤ
+Exec=/home/noras/.local/share/ACCELA/ACCELA.AppImage %u
+Icon=accela
+Terminal=false
+Type=Application
+Categories=Utility;Application;
+MimeType=x-scheme-handler/accela;

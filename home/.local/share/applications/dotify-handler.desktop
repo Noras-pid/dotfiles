@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Dotify
+Terminal=false
+Icon=dotify
+NoDisplay=true
+MimeType=x-scheme-handler/dotify
+Exec=/home/noras/.local/share/dotify/Dotify.AppImage %u

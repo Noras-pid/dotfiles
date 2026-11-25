@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+latest="$(cliphist list | sed -n '1p')"
+[[ -n "$latest" ]] || exit 0
+printf "%s\n" "$latest" | cliphist decode | wl-copy
+sleep 0.15
+wtype -M ctrl -k v -m ctrl

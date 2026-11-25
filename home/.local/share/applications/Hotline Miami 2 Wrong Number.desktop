@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Hotline Miami 2: Wrong Number
+Comment=Play this game on Steam
+Exec=steam steam://rungameid/274170
+Icon=steam_icon_274170
+Terminal=false
+Type=Application
+Categories=Game;

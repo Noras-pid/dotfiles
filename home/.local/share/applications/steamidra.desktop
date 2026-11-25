@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=SteaMidra
+Comment=Steam game setup and manifest tool
+Exec=/home/noras/.local/share/SteaMidra/SteaMidra.AppImage
+Icon=SteaMidra
+Terminal=false
+Type=Application
+Categories=Utility;
+StartupNotify=false

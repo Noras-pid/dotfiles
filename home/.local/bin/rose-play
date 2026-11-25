@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Mocktail with Rose, from the terminal: `rose-play 1818` joins a place.
+#
+# The module itself is installed into ~/.local/bin/mocktail by the Rose menu
+# (Mocktail -> Install module). This only adds the place-id shorthand, and it
+# goes through that wrapper so exactly one copy of the library is preloaded.
+set -euo pipefail
+
+WRAPPER="${MOCKTAIL_WRAPPER:-$HOME/.local/bin/mocktail}"
+[[ -x "$WRAPPER" ]] || {
+    echo "rose-play: install the module first (Rose -> Mocktail -> Install module)" >&2
+    exit 1
+}
+
+args=()
+if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+    args=(--launch-uri "roblox://placeId=$1")
+elif [[ -n "${1:-}" ]]; then
+    args=("$@")
+fi
+
+exec "$WRAPPER" "${args[@]}"

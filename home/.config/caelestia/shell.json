@@ -1,0 +1,33 @@
+{
+    "appearance": {
+        "transparency": {
+            "enabled": false
+        }
+    },
+    "background": {
+        "visualiser": {
+            "enabled": false
+        }
+    },
+    "general": {
+        "apps": {
+            "audio": [
+                "pavucontrol"
+            ],
+            "explorer": [
+                "dolphin"
+            ],
+            "terminal": [
+                "kitty"
+            ]
+        },
+        "idle": {
+            "inhibitWhenCharging": true
+        },
+        "showOverFullscreen": false
+    },
+    "services": {
+        "dataUnits": "Decimal",
+        "gpuType": "Nvidia"
+    }
+}

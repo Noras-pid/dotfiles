@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# yara (via yara-python - no native binary needed)
+exec "$HOME/.local/opt/revenv/bin/python" -c '
+import sys, yara
+if len(sys.argv) < 3:
+    sys.exit("usage: yara <rules.yar> <target> [target...]")
+rules = yara.compile(filepath=sys.argv[1])
+rc = 0
+for target in sys.argv[2:]:
+    for m in rules.match(target):
+        print("%s %s" % (m.rule, target))
+        for s in m.strings:
+            for inst in s.instances:
+                print("  0x%x:%s: %s" % (inst.offset, s.identifier, inst.matched_data[:60]))
+print("", end="")
+' "$@"

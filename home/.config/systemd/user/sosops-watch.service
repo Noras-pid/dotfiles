@@ -1,0 +1,16 @@
+[Unit]
+Description=SOS OPS weapon menu auto-inject
+Documentation=file:///home/noras/sos-ops-mod/auto-inject.sh
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/home/noras/sos-ops-mod/auto-inject.sh
+Restart=always
+RestartSec=5
+# The watcher polls process names and shells out to Proton; it needs the session env.
+Environment=DISPLAY=:0
+Environment=WAYLAND_DISPLAY=wayland-1
+
+[Install]
+WantedBy=graphical-session.target

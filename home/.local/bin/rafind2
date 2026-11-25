@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+export LD_LIBRARY_PATH="$HOME/.local/lib:$HOME/.local/lib/radare2:${LD_LIBRARY_PATH:-}"
+exec "$HOME/.local/opt/r2pkg/usr/bin/rafind2" "$@"

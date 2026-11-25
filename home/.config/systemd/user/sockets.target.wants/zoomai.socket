@@ -1,0 +1,9 @@
+[Unit]
+Description=Socket the Claude panel inside Zoom connects to
+
+[Socket]
+ListenStream=/home/noras/.var/app/us.zoom.Zoom/.zoom/zoomai.sock
+SocketMode=0600
+
+[Install]
+WantedBy=sockets.target

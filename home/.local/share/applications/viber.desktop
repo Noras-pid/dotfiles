@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Viber
+Comment=Viber VoIP and messenger
+Comment[ru]=Сообщения и звонки Viber
+Exec=/home/noras/.local/bin/viber %u
+TryExec=/home/noras/.local/bin/viber
+Icon=viber
+Terminal=false
+Type=Application
+Categories=Network;InstantMessaging;
+MimeType=x-scheme-handler/viber;
+StartupWMClass=ViberPC
+X-AppImage-Version=27.3.0.2

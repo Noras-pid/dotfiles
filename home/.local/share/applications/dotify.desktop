@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Dotify
+GenericName=Music Player
+Comment=Dotify music player
+Exec=/home/noras/.local/share/dotify/run.sh %u
+Icon=dotify
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=dotify
+MimeType=x-scheme-handler/dotify;

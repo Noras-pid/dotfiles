@@ -1,0 +1,11 @@
+[Unit]
+Description=Check sunset/sunrise for the night light every 5 minutes
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Timer]
+OnActiveSec=20s
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=graphical-session.target

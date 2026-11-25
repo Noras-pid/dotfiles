@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+export QTWEBENGINE_DISABLE_SANDBOX=1
+exec "/home/noras/.local/share/SteaMidra/SteaMidra.AppImage" "$@"

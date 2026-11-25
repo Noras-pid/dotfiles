@@ -1,0 +1,3 @@
+org.qbittorrent.qBittorrent
+org.vinegarhq.Sober
+us.zoom.Zoom

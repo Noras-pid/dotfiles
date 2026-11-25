@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=TLauncher
+Comment=Minecraft launcher
+Exec=/home/noras/.local/bin/tlauncher
+Icon=/home/noras/.local/share/icons/tlauncher.png
+Terminal=false
+Path=/home/noras/.local/share/tlauncher
+Type=Application
+Categories=Game;

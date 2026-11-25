@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# run-with-proton [--dgpu] <file.exe|.msi|.bat|.lnk>
+# Run a Windows program through Proton (umu-run), in Faugus Launcher's default
+# prefix and runner, so whatever it installs shows up there too.
+#   --dgpu   render on the NVIDIA card (PRIME offload) — for games
+# A trainer ("...Trainer.exe") must share the game's prefix and Proton, or it
+# can't see the game: it is matched by name to an installed Steam game and
+# started with `protontricks-launch --appid`; no match → protontricks' picker.
+# Thunar's "Запустить через Proton" actions call this. Log: ~/.cache/run-with-proton/<name>.log
+set -u
+
+dgpu=0
+[[ ${1:-} == --dgpu ]] && { dgpu=1; shift; }
+file="${1:-}"
+[[ -f $file ]] || { notify-send -a Proton -u critical "Proton" "Файл не найден: $file"; exit 1; }
+file="$(realpath -- "$file")"
+name="$(basename -- "$file")"
+
+# steam_game_for <file name>: the appid of the installed Steam game whose name
+# the file name starts with (the longest match), or nothing
+steam_game_for() {
+    timeout 60 protontricks -l 2>/dev/null | python3 -c '
+import re, sys
+words = lambda s: re.findall(r"[a-z0-9]+", s.lower())
+want = words(re.split(r"(?i)\s(v\d|plus\s\d|trainer)", sys.argv[1])[0])
+best = None
+for line in sys.stdin:
+    m = re.match(r"^(.*) \((\d+)\)\s*$", line.strip())
+    if not m: continue
+    g = words(m.group(1))
+    if g and want[:len(g)] == g and (best is None or len(g) > best[0]):
+        best = (len(g), m.group(2))
+if best: print(best[1])
+' "$1"
+}
+
+# A game inside a Steam library (…/steamapps/common/<dir>/…) quits when started
+# straight from its exe (Steam DRM restarts it through Steam, which never
+# happens here): hand it to Steam by the appid whose manifest owns <dir>.
+if [[ ${name,,} != *trainer* && $file == */steamapps/common/* ]]; then
+    lib="${file%%/steamapps/common/*}/steamapps"
+    dir="${file#*/steamapps/common/}"; dir="${dir%%/*}"
+    appid="$(python3 - "$lib" "$dir" <<'PYCODE'
+from pathlib import Path
+import re, sys
+
+for manifest in sorted(Path(sys.argv[1]).glob('appmanifest_*.acf')):
+    try:
+        text = manifest.read_text()
+    except (OSError, UnicodeError):
+        continue
+    match = re.search(r'"installdir"\s+"([^"\r\n]+)"', text)
+    appid = re.fullmatch(r'appmanifest_(\d+)\.acf', manifest.name)
+    if match and appid and match[1] == sys.argv[2]:
+        print(appid[1])
+        break
+PYCODE
+)"
+    if [[ -n $appid ]]; then
+        notify-send -a Proton -i steam "Игра из Steam" "$dir запускается через Steam (ID $appid)"
+        exec steam "steam://rungameid/$appid" >/dev/null 2>&1
+    fi
+fi
+
+if [[ ${name,,} == *trainer* ]] && command -v protontricks-launch >/dev/null; then
+    (( dgpu )) && export __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only
+    logdir="$HOME/.cache/run-with-proton"; mkdir -p "$logdir"; log="$logdir/${name%.*}.log"
+    cd -- "$(dirname -- "$file")" || exit 1
+    appid="$(steam_game_for "$name")"
+    # the trainer has to join the running game: started first, it takes the
+    # prefix in its own container and the game then waits for it forever
+    if [[ -n $appid ]] && ! pgrep -f "SteamLaunch AppId=$appid( |$)" >/dev/null; then
+        notify-send -a Proton -u critical -i wine "Сначала запусти игру" "Трейнер подключается к уже запущенной игре (Steam $appid). Запусти её в Steam, потом трейнер."
+        exit 1
+    fi
+    if [[ -n $appid ]]; then
+        notify-send -a Proton -i wine "Трейнер в префиксе игры" "$name · Steam $appid"
+        exec protontricks-launch --no-term --appid "$appid" "$file" >"$log" 2>&1
+    fi
+    notify-send -a Proton -i wine "Трейнер" "Игра не найдена по имени — выбери её в списке"
+    exec protontricks-launch --no-term "$file" >"$log" 2>&1
+fi
+
+# runner: Faugus' default, then the packaged CachyOS build
+for p in "$HOME/.local/share/Steam/compatibilitytools.d/Proton-CachyOS Latest" \
+         /usr/share/steam/compatibilitytools.d/proton-cachyos-slr \
+         /usr/share/steam/compatibilitytools.d/proton-cachyos; do
+    [[ -x $p/proton ]] && { export PROTONPATH="$p"; break; }
+done
+[[ -n ${PROTONPATH:-} ]] || { notify-send -a Proton -u critical "Proton" "Не найден ни один Proton"; exit 1; }
+
+export WINEPREFIX="$HOME/Faugus/default"
+export GAMEID="umu-default" STORE="none"
+if (( dgpu )); then
+    # GL, Vulkan, DXVK (DX9-11) and vkd3d-proton (DX12) all pick the GTX
+    export __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only \
+           DXVK_FILTER_DEVICE_NAME=NVIDIA VKD3D_FILTER_DEVICE_NAME=NVIDIA
+fi
+
+# A second umu container can't join a prefix another one is running: it waits
+# for that wineserver forever with no window. Say so instead of hanging.
+busy=""
+for p in $(pgrep -x wineserver); do
+    if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -qx "WINEPREFIX=$WINEPREFIX/\?\(pfx/\?\)\?"; then busy=$p; break; fi
+done
+if [[ -n $busy ]]; then
+    running="$(for q in $(pgrep -f '\.exe'); do tr '\0' '\n' < /proc/$q/environ 2>/dev/null | grep -q "^WINEPREFIX=$WINEPREFIX" && ps -o args= -p $q; done 2>/dev/null \
+               | grep -o '[^\\/]*\.exe' | grep -viE '^(services|winedevice|plugplay|svchost|explorer|rpcss|tabtip|steam|umu|wineserver|start|conhost)\.exe$' | sort -u | head -3 | tr '\n' ' ')"
+    notify-send -a Proton -u critical "Proton занят" "В префиксе уже запущено: ${running:-программа без окна}. Закрой её (или подожди) и запусти снова."
+    exit 1
+fi
+
+logdir="$HOME/.cache/run-with-proton"; mkdir -p "$logdir"
+log="$logdir/${name%.*}.log"
+cd -- "$(dirname -- "$file")" || exit 1
+
+case "${name,,}" in
+    *.msi) cmd=(umu-run msiexec /i "$file") ;;
+    *.bat|*.cmd) cmd=(umu-run cmd /c "$file") ;;
+    *.lnk) cmd=(umu-run start /unix "$file") ;;
+    *) cmd=(umu-run "$file") ;;
+esac
+
+notify-send -a Proton -i wine "Запуск через Proton" "$name$( (( dgpu )) && echo ' · NVIDIA')"
+"${cmd[@]}" >"$log" 2>&1
+rc=$?
+# Windows programs often exit non-zero normally; only report a quick failure
+if (( rc != 0 && SECONDS < 10 )); then
+    notify-send -a Proton -u critical "Proton: $name не запустился" "Код $rc. Лог: $log"
+fi
+exit $rc

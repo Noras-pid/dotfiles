@@ -1,0 +1,15 @@
+[Unit]
+Description=Clear the NTFS dirty flag on disk D before mounting (left behind by hard power-offs)
+# ntfs3 refuses a dirty volume without "force"; ntfsfix -d also re-syncs $MFTMirr and empties $LogFile
+DefaultDependencies=no
+BindsTo=dev-disk-by\x2duuid-44EE544CEE5437FE.device
+After=dev-disk-by\x2duuid-44EE544CEE5437FE.device
+Before=run-media-noras-44EE544CEE5437FE.mount
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/bin/ntfsfix -d /dev/disk/by-uuid/44EE544CEE5437FE
+TimeoutStartSec=60
+
+[Install]
+WantedBy=run-media-noras-44EE544CEE5437FE.mount

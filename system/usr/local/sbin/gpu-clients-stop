@@ -1,0 +1,93 @@
+#!/bin/bash
+# Closes every app that holds the GTX 1050 open, one app at a time, before the
+# session is torn down. A mass SIGTERM/SIGKILL of these clients while Hyprland
+# exits freezes the nvidia 580xx driver (black screen, fans on, empty journal).
+# Hyprland and Xwayland keep their handles: they die cleanly once alone.
+
+GRACE=${GRACE:-6}
+NV_NODES="/dev/nvidiactl /dev/nvidia0 /dev/nvidia-modeset /dev/nvidia-uvm"
+for n in /dev/dri/by-path/pci-0000:01:00.0-*; do NV_NODES="$NV_NODES $(readlink -f "$n")"; done
+
+comm() { cat /proc/$1/comm 2>/dev/null; }
+ppid() { awk '/^PPid:/{print $2}' /proc/$1/status 2>/dev/null; }
+
+is_keeper() {
+    case "$(comm "$1")" in
+        Hyprland|Xwayland|systemd|systemd-logind) return 0 ;;
+    esac
+    return 1
+}
+
+holders() {
+    for p in $(fuser $NV_NODES 2>/dev/null); do
+        p=${p%%[!0-9]*}
+        [ -n "$p" ] && ! is_keeper "$p" && echo "$p"
+    done | sort -un
+}
+
+app_root() {
+    local c=$1 parent
+    while :; do
+        parent=$(ppid "$c")
+        [ -z "$parent" ] || [ "$parent" -le 1 ] && break
+        case "$(comm "$parent")" in Hyprland|systemd) break ;; esac
+        c=$parent
+    done
+    echo "$c"
+}
+
+subtree() {
+    local all
+    all=$(ps -e -o pid=,ppid=)
+    awk -v root="$1" '
+        { kids[$2] = kids[$2] " " $1 }
+        END {
+            queue[1] = root; head = 1; tail = 1
+            while (head <= tail) {
+                p = queue[head++]; print p
+                n = split(kids[p], k, " ")
+                for (i = 1; i <= n; i++) queue[++tail] = k[i]
+            }
+        }' <<<"$all"
+}
+
+alive() {
+    for p in $1; do [ -d /proc/$p ] && return 0; done
+    return 1
+}
+
+wait_gone() {
+    local pids=$1 ticks=$(( $2 * 10 ))
+    while [ $ticks -gt 0 ] && alive "$pids"; do sleep 0.1; ticks=$((ticks - 1)); done
+    ! alive "$pids"
+}
+
+done_roots=" "
+for round in 1 2 3; do
+    list=$(holders)
+    [ -z "$list" ] && break
+    for h in $list; do
+        [ -d /proc/$h ] || continue
+        root=$(app_root "$h")
+        case "$done_roots" in *" $root "*) continue ;; esac
+        done_roots="$done_roots$root "
+        name=$(comm "$root")
+        tree=$(subtree "$root" | tr '\n' ' ')
+        if [ -n "$DRY_RUN" ]; then echo "would close $name ($root), tree: $tree"; continue; fi
+        kill -TERM "$root" 2>/dev/null
+        if wait_gone "$tree" "$GRACE"; then echo "closed $name ($root)"; continue; fi
+        kill -TERM $tree 2>/dev/null
+        if wait_gone "$tree" 3; then echo "closed $name ($root) after TERM to its tree"; continue; fi
+        kill -KILL $tree 2>/dev/null
+        wait_gone "$tree" 2
+        echo "killed $name ($root)"
+    done
+done
+
+left=$(holders)
+if [ -n "$left" ]; then
+    echo "still holding the dGPU:" $(for p in $left; do echo "$(comm "$p")($p)"; done)
+else
+    echo "dGPU free of app clients"
+fi
+exit 0

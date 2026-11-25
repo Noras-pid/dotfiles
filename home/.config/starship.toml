@@ -1,0 +1,67 @@
+# Rei Ayanami — calm blue, readable context, two-line prompt.
+add_newline = true
+command_timeout = 700
+palette = 'rei'
+format = """
+[╭─](muted)$username$directory$git_branch$git_status$fill$cmd_duration$status$time
+[╰─](muted)$character"""
+
+[palettes.rei]
+blue = '#9ccfff'
+ice = '#c1e2ff'
+muted = '#92a5bb'
+red = '#e66a7d'
+green = '#95d5a7'
+violet = '#c0a8df'
+yellow = '#d6c791'
+[username]
+show_always = true
+style_user = 'bold ice'
+style_root = 'bold red'
+format = '[ $user ]($style)[/ ](muted)'
+[directory]
+style = 'bold blue'
+home_symbol = '~'
+truncation_length = 3
+truncation_symbol = '…/'
+read_only = ' '
+format = '[$path]($style)[$read_only](red) '
+[git_branch]
+symbol = ' '
+style = 'violet'
+format = '[$symbol$branch]($style) '
+[git_status]
+style = 'yellow'
+format = '([$all_status$ahead_behind]($style) )'
+conflicted = '≠${count} '
+ahead = '↑${count} '
+behind = '↓${count} '
+diverged = '↑${ahead_count}↓${behind_count} '
+untracked = '?${count} '
+modified = '!${count} '
+staged = '+${count} '
+renamed = '»${count} '
+deleted = '-${count} '
+stashed = '≡${count} '
+[fill]
+symbol = ' '
+[cmd_duration]
+min_time = 2000
+style = 'yellow'
+format = '[󱎫 $duration ]($style)'
+[status]
+disabled = false
+symbol = '✕ '
+style = 'red'
+format = '[$symbol$status ]($style)'
+[time]
+disabled = false
+time_format = '%H:%M'
+style = 'muted'
+format = '[$time]($style)'
+[character]
+success_symbol = '[❯](bold blue)'
+error_symbol = '[❯](bold red)'
+vimcmd_symbol = '[❮](bold green)'
+[package]
+disabled = true

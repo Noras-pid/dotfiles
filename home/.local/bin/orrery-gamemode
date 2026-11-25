@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Toggle game mode: pause animations and shadows (Lua config needs `hyprctl eval`,
+# `hyprctl keyword` is rejected), and hold Feral gamemode while it is on.
+set -euo pipefail
+state="${XDG_RUNTIME_DIR:-/tmp}/orrery-gamemode"
+if [[ -e "$state" ]]; then
+    pid="$(cat "$state" 2>/dev/null || true)"
+    [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+    rm -f "$state"
+    hyprctl reload >/dev/null          # back to the configured look
+    notify-send -a Orrery "Game mode off"
+else
+    hyprctl eval 'hl.config({ animations = { enabled = false }, decoration = { shadow = { enabled = false } } })' >/dev/null
+    : > "$state"
+    if command -v gamemoded >/dev/null 2>&1; then
+        gamemoded -r >/dev/null 2>&1 &   # requests gamemode and waits until killed
+        echo $! > "$state"
+    fi
+    notify-send -a Orrery "Game mode on" "Animations and shadows paused"
+fi

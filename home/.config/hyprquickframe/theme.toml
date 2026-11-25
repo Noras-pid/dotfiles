@@ -1,0 +1,29 @@
+# HyprQuickFrame in the Rei Ayanami palette
+accent = "#9ccfff"
+accentText = "#0b1022"
+dimOpacity = 0.55
+borderRadius = 8
+outlineThickness = 2
+bottomMargin = 60
+animations = true
+annotationTool = "satty"
+
+[bar]
+background = "rgba(11, 16, 34, 0.85)"
+border = "rgba(193, 226, 255, 0.24)"
+text = "#C3D1DF"
+shadow = "#80000000"
+
+[toggle]
+shadow = "#80000000"
+edit = "#95d5a7"
+temp = "#c0a8df"
+
+[share]
+connected = "#9ccfff"
+pending = "#71869f"
+errorIcon = "white"
+errorBackground = "#e66a7d"
+
+[hooks]
+postSaveHook = ""

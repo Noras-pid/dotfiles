@@ -1,0 +1,16 @@
+[Unit]
+Description=Apply the verified SCP SL identity after graphical login
+PartOf=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/python3 /home/noras/scpsl-hwid/autostart.py session
+RuntimeDirectory=scpsl-profile-autostart
+RuntimeDirectoryMode=0700
+TimeoutStartSec=15min
+RemainAfterExit=yes
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=graphical-session.target

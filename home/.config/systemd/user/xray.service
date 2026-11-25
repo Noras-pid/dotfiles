@@ -1,0 +1,10 @@
+[Unit]
+Description=xray vless client
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/xray run -c %h/.config/xray/config.json
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

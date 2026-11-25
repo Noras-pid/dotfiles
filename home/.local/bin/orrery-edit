@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Open a config in an installed terminal editor; validate Lua after closing it.
+set -euo pipefail
+f="${1:-}"
+f="${f/#\~/$HOME}"
+ed="${EDITOR:-}"
+if [[ -z "$ed" ]] || ! command -v "${ed%% *}" >/dev/null 2>&1; then
+    for candidate in micro nvim nano vim; do
+        if command -v "$candidate" >/dev/null 2>&1; then ed="$candidate"; break; fi
+    done
+fi
+[[ -n "$ed" ]] || { notify-send -u critical Orrery "No text editor installed"; exit 1; }
+check=':'
+[[ "$f" == *.lua && "$f" == *"/hypr/"* ]] && check='hyprctl reload >/dev/null; e=$(hyprctl configerrors); [[ -z "$e" || "$e" == *"No errors"* ]] && echo "hyprland config ok" || { echo "$e"; exit 1; }'
+quoted=$(printf '%q' "$f")
+exec "$HOME/.local/bin/orrery-float" "$ed ${f:+$quoted} && $check"

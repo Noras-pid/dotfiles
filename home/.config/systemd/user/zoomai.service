@@ -1,0 +1,13 @@
+[Unit]
+Description=Claude assistant for Zoom (zoomai serve)
+Requires=zoomai.socket
+After=zoomai.socket
+
+[Service]
+WorkingDirectory=/home/noras/zoom-guard/zoomai
+Environment=PYTHONPATH=/home/noras/zoom-guard/zoomai
+ExecStart=/home/noras/zoom-guard/zoomai/.venv/bin/python -m zoomai.cli serve
+MemoryMax=3G
+MemorySwapMax=0
+Restart=on-failure
+RestartSec=5

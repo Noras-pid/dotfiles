@@ -1,0 +1,18 @@
+[Unit]
+Description=Unload NVIDIA driver before poweroff (GTX 1050 can hang the last stage of shutdown)
+# Started before the session units, so on shutdown it stops AFTER them:
+# Hyprland, Discord, Steam etc. hold /dev/nvidia* until then
+DefaultDependencies=no
+Before=display-manager.service systemd-user-sessions.service shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+# leaves its result in the journal: next boot `journalctl -b -1 -u nvidia-unload-on-shutdown`
+ExecStop=-/usr/bin/sh -c 'echo "nvidia users: $(fuser /dev/nvidia* 2>/dev/null)"; modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia && echo "nvidia unloaded" || { echo "nvidia unload failed:"; lsmod | grep ^nvidia; }'
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+export GHIDRA_INSTALL_DIR="$HOME/.local/opt/ghidra_12.2_PUBLIC"
+export JAVA_HOME="$HOME/.local/opt/jdk-25.0.5.1+2"
+exec "$HOME/.local/opt/revenv/bin/python" "$HOME/.local/opt/revscripts/rev-decompile" "$@"

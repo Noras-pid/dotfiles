@@ -1,0 +1,41 @@
+// Local additions and destinations for the active Rei configuration.
+{
+  "toggle.gamemode": {
+    "icon": "sports_esports",
+    "label": "Game mode",
+    "description": "games performance animations gamemode",
+    "checked": "gamemode",
+    "action": "~/.local/bin/orrery-gamemode",
+    "keep": true
+  },
+  "appearance.look": {
+    "action": "orrery-edit ~/.config/hypr/hyprland.lua"
+  },
+  "devices.input": {
+    "action": "orrery-edit ~/.config/hypr/rei_user.lua"
+  },
+  "settings.keybindings": {
+    "action": "orrery-edit ~/.config/hypr/rei_keybinds_orrery.lua"
+  },
+  "settings.autostart": {
+    "action": "orrery-edit ~/.config/hypr/rei_execs.lua"
+  },
+  "settings.rules": {
+    "action": "orrery-edit ~/.config/hypr/hyprland/rules.lua"
+  },
+  "learn.readme": {
+    "action": "orrery-edit /home/noras/.local/src/Orrery-dotfiles/README.md"
+  },
+  "settings.defaults.browser.zen": {
+    "when": "haszen"
+  },
+  "settings.defaults.browser.chromium": {
+    "when": "haschromium"
+  },
+  "settings.defaults.terminal.kitty": {
+    "when": "haskitty"
+  },
+  "settings.defaults.terminal.alacritty": {
+    "when": "hasalacritty"
+  }
+}

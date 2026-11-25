@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=IDA Pro 9.4
+Comment=Interactive disassembler
+Exec=/home/noras/Applications/IDA-Pro-9.4/ida %F
+Icon=/home/noras/Applications/IDA-Pro-9.4/appico.png
+Path=/home/noras/Applications/IDA-Pro-9.4
+Terminal=false
+Categories=Development;Debugger;
+StartupNotify=true

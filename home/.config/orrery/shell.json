@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "bar": {
+    "position": "top",
+    "transparent": false,
+    "skin": "floating",
+    "hidden": false,
+    "battery": false,
+    "layout": {
+      "pill": {
+        "left": [
+          "clock",
+          "workspaces"
+        ],
+        "center": [
+          "tray"
+        ],
+        "right": [
+          "agents",
+          "vpn",
+          "audio",
+          "network",
+          "battery",
+          "caffeine",
+          "bell"
+        ]
+      },
+      "minimal": {
+        "left": [
+          "workspaces",
+          "media"
+        ],
+        "center": [
+          "clock",
+          "weather"
+        ],
+        "right": [
+          "sysmon",
+          "tray",
+          "vpn",
+          "keyboard",
+          "control",
+          "bell"
+        ]
+      }
+    },
+    "modules": {
+      "vpn": {
+        "qml": "~/.config/orrery/plugins/vpn.qml"
+      }
+    },
+    "trayExpanded": true
+  },
+  "dock": {
+    "enabled": false,
+    "mode": "always",
+    "position": "bottom",
+    "transparent": false,
+    "iconSize": 40,
+    "pinned": [
+      "foot",
+      "thunar",
+      "firefox",
+      "discord",
+      "steam"
+    ]
+  },
+  "font": {
+    "size": 13,
+    "family": "Inter"
+  },
+  "agents": {
+    "default": "claude-desktop"
+  },
+  "weather": {
+    "location": "49.1118,28.6889",
+    "name": "Вороновиця"
+  },
+  "look": {
+    "radius": 8
+  }
+}

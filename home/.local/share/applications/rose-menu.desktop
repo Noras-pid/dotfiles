@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Rose
+GenericName=Roblox script executor
+Comment=Rose menu: scripts and the Cordial and Mocktail modules
+Exec=/home/noras/.local/share/rose/rose-ui
+Icon=/home/noras/.local/share/rose/rose.png
+Terminal=false
+Categories=Game;
+Keywords=roblox;executor;exploit;script;scripts;lua;luau;rose;menu;cordial;mocktail;
+StartupWMClass=rose-ui

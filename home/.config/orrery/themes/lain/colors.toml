@@ -1,0 +1,78 @@
+# Lain — a hued theme sampled from the Serial Experiments Lain wallpapers in
+# backgrounds/ (fauux-style duotones). The images are 60-90 % pure black, so
+# the surfaces are black with a faint rose tint taken from the dark maroon
+# halftone (#42252c, #2d1a1e). The accent is Lain's pink (#d0778b, hair and
+# eyes). Text is the bone cream of the skin highlights (#c3b493). The hue keys
+# stay muted and warm so they read as part of the duotone, not over it.
+
+name = "Lain"
+mode = "dark"
+hued = true
+bar = "floating"
+
+[colors]
+bg0 = "#0b0809"
+bg1 = "#140e10"
+bg2 = "#1e1518"
+bg3 = "#2e2024"
+bg4 = "#45303a"
+
+fg = "#ece2d4"
+accent_bright = "#d8798e"
+accent_light = "#eeb0bc"
+accent_mid = "#b9aa98"
+accent_dim = "#85707a"
+
+active = "#d8798e"
+hover = "#eeb0bc"
+warning = "#d9c08f"
+critical = "#e45d74"
+
+grey0 = "#3a2a30"
+grey1 = "#6e5c62"
+grey2 = "#a39095"
+
+red = "#e45d74"
+orange = "#de9576"
+yellow = "#d9c08f"
+green = "#a8c49a"
+aqua = "#a2c2b6"
+blue = "#97a9d8"
+purple = "#c79ac6"
+
+[terminal]
+background = "#0b0809"
+foreground = "#ece2d4"
+cursor = "#d8798e"
+selection_background = "#4a2832"
+selection_foreground = "#ece2d4"
+color0 = "#1e1518"
+color1 = "#e45d74"
+color2 = "#a8c49a"
+color3 = "#d9c08f"
+color4 = "#97a9d8"
+color5 = "#d8798e"
+color6 = "#a2c2b6"
+color7 = "#cbbfb2"
+color8 = "#5e4a52"
+color9 = "#f08a9c"
+color10 = "#bed6b1"
+color11 = "#e8d4aa"
+color12 = "#b3c1e6"
+color13 = "#eeb0bc"
+color14 = "#bdd6cc"
+color15 = "#f6eee4"
+
+[git]
+added = "#a8c49a"
+modified = "#d9c08f"
+deleted = "#e45d74"
+renamed = "#d8798e"
+conflict = "#de9576"
+
+[apps]
+gtk_theme = "adw-gtk3-dark"
+icon_theme = "Papirus-Dark-palebrown"
+cursor_theme = "Bibata-Modern-Ice"
+qt_style = "Fusion"
+nvim_colorscheme = "aether"

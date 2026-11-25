@@ -1,0 +1,9 @@
+*.bak
+*.bak-*
+*.before-orrery-shortcuts
+*.fancy-*
+*.minimal-*
+__pycache__/
+.zsh_history
+*.log
+secrets/*.tar.gz

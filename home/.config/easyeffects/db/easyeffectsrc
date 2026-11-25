@@ -1,0 +1,9 @@
+[StreamInputs]
+inputDevice=alsa_input.usb-Logitech_G_series_G435_Wireless_Gaming_Headset_202105190004-00.mono-fallback
+
+[StreamOutputs]
+outputDevice=alsa_output.usb-Logitech_G_series_G435_Wireless_Gaming_Headset_202105190004-00.analog-stereo
+
+[Window]
+height=956
+width=938

@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /home/noras/.local/opt/froststrap/squashfs-root/AppRun "$@"

@@ -1,0 +1,77 @@
+-- ─── 1. Session identity ─────────────────────────────────────────────────────
+hl.env("XDG_SESSION_TYPE", "wayland")
+hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
+hl.env("XDG_SESSION_DESKTOP", "Hyprland")
+
+-- ─── 2. Toolkit / backend selection ──────────────────────────────────────────
+-- Native Wayland first, X11 only as a fallback.
+
+hl.env("GDK_BACKEND", "wayland,x11,*") -- GTK
+hl.env("QT_QPA_PLATFORM", "wayland;xcb") -- Qt
+hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
+--hl.env("QT_QPA_PLATFORMTHEME", "qt5ct")
+hl.env("QT_QPA_PLATFORMTHEME", "qt6ct")
+
+hl.env("SDL_VIDEODRIVER", "wayland")
+hl.env("CLUTTER_BACKEND", "wayland")
+hl.env("ELECTRON_OZONE_PLATFORM_HINT", "wayland")
+
+-- ─── 3. HiDPI scaling (paired with xwayland.force_zero_scaling) ──────────────
+-- Native-Wayland apps get the scale from the compositor. XWayland apps do not,
+-- so each toolkit is told by hand.
+
+--hl.env("GDK_SCALE", "1.6")                 
+--hl.env("QT_SCALE_FACTOR", "1.6")
+--hl.env("QT_AUTO_SCREEN_SCALE_FACTOR", "0") 
+--hl.env("JDK_JAVA_OPTIONS", "-Dsun.java2d.uiScale=1.6")
+
+-- ─── 4. Cursor sizing ────────────────────────────────────────────────────────
+hl.env("HYPRCURSOR_SIZE", "16")
+hl.env("XCURSOR_SIZE", "24")
+
+-- ─── 5. NVIDIA / GPU ─────────────────────────────────────────────────────────
+-- only when the NVIDIA driver is loaded: on an Intel/AMD machine these
+-- stop Hyprland from starting
+local nv = io.open("/proc/driver/nvidia/version")
+if nv then
+    nv:close()
+    hl.env("GBM_BACKEND", "nvidia-drm")
+    hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
+    -- Video decoding (VA-API) on the NVIDIA card only when NVIDIA drives the
+    -- screen. On a hybrid laptop whose screen hangs off the Intel/AMD GPU,
+    -- frames decoded on NVIDIA can't be shown by Chromium (video areas went
+    -- see-through) and keep the dGPU awake; unset, libva picks the driver of
+    -- the GPU the app renders on (iHD / radeonsi).
+    local igpu_display = false
+    local ls = io.popen("for c in /sys/class/drm/card*-*/status; do [ \"$(cat \"$c\" 2>/dev/null)\" = connected ] || continue; " ..
+                        "d=${c%/status}; d=${d##*/}; cat \"/sys/class/drm/${d%%-*}/device/vendor\" 2>/dev/null; done")
+    if ls then
+        for vendor in ls:lines() do
+            if vendor ~= "0x10de" then igpu_display = true end
+        end
+        ls:close()
+    end
+    if not igpu_display then hl.env("LIBVA_DRIVER_NAME", "nvidia") end
+end
+
+-- ─── 6. Disabled / optional ────────────────────────────
+
+-- hl.env("WLR_NO_HARDWARE_CURSORS", "1")   -- if NVIDIA hardware cursors flicker
+
+-- PRIME render offload for hybrid Intel+NVIDIA (`prime-run <app>`)
+-- hl.env("__NV_PRIME_RENDER_OFFLOAD", "1")
+-- hl.env("__VK_LAYER_NV_optimus", "NVIDIA_only")
+
+-- hl.env("NVD_BACKEND", "direct")          -- can fix Firefox VA-API on some drivers
+-- hl.env("GTK_USE_PORTAL", "1")            -- force GTK pickers through xdg-desktop-portal
+
+-- hl.env("MOZ_DISABLE_RDD_SANDBOX", "1")
+-- hl.env("EGL_PLATFORM", "wayland")
+
+-- Software rendering — only useful inside a VM without GPU passthrough.
+-- hl.env("WLR_RENDERER_ALLOW_SOFTWARE", "1")
+-- hl.env("LIBGL_ALWAYS_SOFTWARE", "1")
+
+-- The theme/wallpaper scripts live in ~/.local/bin (stowed from theme/). Make
+-- sure keybinds find them regardless of what the login shell put in PATH.
+hl.env("PATH", os.getenv("HOME") .. "/.local/bin:" .. (os.getenv("PATH") or "/usr/local/bin:/usr/bin"))

@@ -1,0 +1,24 @@
+{
+  "logo": {
+    "type": "file",
+    "source": "/home/noras/.config/fastfetch/rei-logo.txt",
+    "padding": {
+      "right": 3
+    }
+  },
+  "modules": [
+    "title",
+    "separator",
+    "os",
+    "wm",
+    {
+      "type": "custom",
+      "key": "Theme",
+      "format": "Orrery · Rei Ayanami"
+    },
+    "terminal",
+    "shell",
+    "break",
+    "colors"
+  ]
+}

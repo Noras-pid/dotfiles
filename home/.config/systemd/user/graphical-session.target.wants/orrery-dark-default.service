@@ -1,0 +1,13 @@
+[Unit]
+Description=Apply the preferred dark appearance at desktop login
+PartOf=graphical-session.target
+After=dbus.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/gsettings set org.gnome.desktop.interface color-scheme prefer-dark
+ExecStart=/usr/bin/gsettings set org.gnome.desktop.interface gtk-theme adw-gtk3-dark
+RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical-session.target

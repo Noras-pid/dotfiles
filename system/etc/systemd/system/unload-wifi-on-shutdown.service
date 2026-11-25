@@ -1,0 +1,18 @@
+[Unit]
+Description=Unload ath10k Wi-Fi driver before poweroff (QCA6174 can hang shutdown)
+# Before= on start means this unit stops AFTER NetworkManager/wpa_supplicant on shutdown
+Before=NetworkManager.service wpa_supplicant.service iwd.service
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+# logged, so a hang here shows up as a start line with no result line
+ExecStop=-/usr/bin/sh -c 'echo "ath10k: unloading"; modprobe -r ath10k_pci && echo "ath10k: unloaded" || echo "ath10k: unload failed"'
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target

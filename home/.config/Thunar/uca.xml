@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+<action>
+	<icon>utilities-terminal</icon>
+	<name>Open Terminal Here</name>
+	<submenu></submenu>
+	<unique-id>1790952483287725-1</unique-id>
+	<command>/home/noras/.local/bin/orrery-terminal %f</command>
+	<description>Open the default terminal in this folder</description>
+	<range></range>
+	<patterns>*</patterns>
+	<startup-notify/>
+	<directories/>
+</action>
+<action>
+	<icon>cursor</icon>
+	<name>Open in Cursor</name>
+	<submenu></submenu>
+	<unique-id>1791459000000001-4</unique-id>
+	<command>/home/noras/.local/bin/cursor %f</command>
+	<description>Open this folder or file in Cursor</description>
+	<range></range>
+	<patterns>*</patterns>
+	<directories/>
+	<text-files/>
+</action>
+<action>
+	<icon>zed</icon>
+	<name>Open with Zed</name>
+	<submenu></submenu>
+	<unique-id>1791459000000012-15</unique-id>
+	<command>zeditor %F</command>
+	<description>Open this folder or file in Zed</description>
+	<range></range>
+	<patterns>*</patterns>
+	<directories/>
+	<text-files/>
+	<other-files/>
+</action>
+<action>
+	<icon>nvim</icon>
+	<name>Edit in Neovim</name>
+	<submenu></submenu>
+	<unique-id>1791459000000002-5</unique-id>
+	<command>/home/noras/.local/bin/orrery-float nvim %f</command>
+	<description>Edit the file in Neovim in a floating terminal</description>
+	<range>1</range>
+	<patterns>*</patterns>
+	<text-files/>
+</action>
+<action>
+	<icon>edit-copy</icon>
+	<name>Copy Path</name>
+	<submenu></submenu>
+	<unique-id>1791459000000003-6</unique-id>
+	<command>sh -c 'printf "%%s" "$1" | wl-copy &amp;&amp; notify-send -a Thunar -i edit-copy "Path copied" "$1"' _ %f</command>
+	<description>Copy the full path to the clipboard</description>
+	<range>1</range>
+	<patterns>*</patterns>
+	<directories/>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>
+<action>
+	<icon>preferences-desktop-wallpaper</icon>
+	<name>Set as Wallpaper</name>
+	<submenu></submenu>
+	<unique-id>1791459000000004-7</unique-id>
+	<command>/home/noras/.local/bin/orrery-wall set %f</command>
+	<description>Use this image as the wallpaper (desktop, lock screen, login)</description>
+	<range>1</range>
+	<patterns>*.png;*.jpg;*.jpeg;*.webp;*.PNG;*.JPG;*.JPEG;*.WEBP</patterns>
+	<image-files/>
+</action>
+<action>
+	<icon>image-x-generic</icon>
+	<name>To PNG</name>
+	<submenu>Convert image</submenu>
+	<unique-id>1791459000000005-8</unique-id>
+	<command>sh -c 'for f; do magick "$f" "${f%%.*}.png"; done; notify-send -a Thunar -i image-x-generic "Converted to PNG" "$# file(s)"' _ %F</command>
+	<description>Save a PNG copy next to each image</description>
+	<range></range>
+	<patterns>*</patterns>
+	<image-files/>
+</action>
+<action>
+	<icon>image-x-generic</icon>
+	<name>To JPG</name>
+	<submenu>Convert image</submenu>
+	<unique-id>1791459000000006-9</unique-id>
+	<command>sh -c 'for f; do magick "$f" -quality 92 "${f%%.*}.jpg"; done; notify-send -a Thunar -i image-x-generic "Converted to JPG" "$# file(s)"' _ %F</command>
+	<description>Save a JPG copy (quality 92) next to each image</description>
+	<range></range>
+	<patterns>*</patterns>
+	<image-files/>
+</action>
+<action>
+	<icon>image-x-generic</icon>
+	<name>To WebP</name>
+	<submenu>Convert image</submenu>
+	<unique-id>1791459000000007-10</unique-id>
+	<command>sh -c 'for f; do magick "$f" -quality 90 "${f%%.*}.webp"; done; notify-send -a Thunar -i image-x-generic "Converted to WebP" "$# file(s)"' _ %F</command>
+	<description>Save a WebP copy (quality 90) next to each image</description>
+	<range></range>
+	<patterns>*</patterns>
+	<image-files/>
+</action>
+<action>
+	<icon>security-high</icon>
+	<name>Copy SHA-256</name>
+	<submenu></submenu>
+	<unique-id>1791459000000008-11</unique-id>
+	<command>sh -c 'h=$(sha256sum "$1" | cut -d" " -f1) &amp;&amp; printf "%%s" "$h" | wl-copy &amp;&amp; notify-send -a Thunar -i security-high "SHA-256 copied" "$h"' _ %f</command>
+	<description>Copy the file's SHA-256 checksum to the clipboard</description>
+	<range>1</range>
+	<patterns>*</patterns>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>
+<action>
+	<icon>ark</icon>
+	<name>Open in Ark</name>
+	<submenu></submenu>
+	<unique-id>1791459000000009-12</unique-id>
+	<command>ark %f</command>
+	<description>Edit the archive in Ark: add or delete files, set a password, test it</description>
+	<range>1</range>
+	<patterns>*.zip;*.7z;*.rar;*.tar;*.tar.gz;*.tgz;*.tar.xz;*.txz;*.tar.zst;*.tar.bz2;*.tbz2;*.gz;*.xz;*.zst;*.bz2;*.iso;*.cab;*.ZIP;*.7Z;*.RAR</patterns>
+	<other-files/>
+</action>
+<action>
+	<icon>package-x-generic</icon>
+	<name>Compress to ZIP</name>
+	<submenu></submenu>
+	<unique-id>1791459000000010-13</unique-id>
+	<command>ark --add --changetofirstpath --autofilename zip %F</command>
+	<description>Pack the selection into a .zip next to it, named after it</description>
+	<range></range>
+	<patterns>*</patterns>
+	<directories/>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>
+<action>
+	<icon>package-x-generic</icon>
+	<name>Compress to 7z</name>
+	<submenu></submenu>
+	<unique-id>1791459000000011-14</unique-id>
+	<command>ark --add --changetofirstpath --autofilename 7z %F</command>
+	<description>Pack the selection into a .7z next to it (smaller than zip)</description>
+	<range></range>
+	<patterns>*</patterns>
+	<directories/>
+	<audio-files/>
+	<image-files/>
+	<other-files/>
+	<text-files/>
+	<video-files/>
+</action>
+<action>
+	<icon>wine</icon>
+	<name>Run with Proton</name>
+	<submenu></submenu>
+	<unique-id>1791058514782225-2</unique-id>
+	<command>/home/noras/.local/bin/run-with-proton %f</command>
+	<description>Run a Windows program with Proton (Faugus prefix)</description>
+	<range>1</range>
+	<patterns>*.exe;*.EXE;*.Exe;*.msi;*.MSI;*.bat;*.BAT;*.cmd;*.lnk</patterns>
+	<other-files/>
+</action>
+<action>
+	<icon>applications-games</icon>
+	<name>Run with Proton (NVIDIA)</name>
+	<submenu></submenu>
+	<unique-id>1791058514782225-3</unique-id>
+	<command>/home/noras/.local/bin/run-with-proton --dgpu %f</command>
+	<description>Run a Windows game with Proton on the NVIDIA GPU</description>
+	<range>1</range>
+	<patterns>*.exe;*.EXE;*.Exe;*.msi;*.MSI;*.bat;*.BAT;*.cmd;*.lnk</patterns>
+	<other-files/>
+</action>
+</actions>

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Neighbors: Suburban Warfare
+Comment=Play this game on Steam
+Exec=steam steam://rungameid/1732430
+Icon=steam_icon_1732430
+Terminal=false
+Type=Application
+Categories=Game;

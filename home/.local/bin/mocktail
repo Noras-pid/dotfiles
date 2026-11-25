@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Mocktail, with Rose inside it. Starts the client even without the library,
+# so a missing module never leaves the user with a dead launcher.
+#
+# Everything this script and the client print goes to a log, because a desktop
+# launcher swallows both streams: a client that dies before its first window
+# would otherwise leave nothing behind at all.
+set -uo pipefail
+LIB="${ROSE_LIB:-$HOME/.local/share/rose/libRose.so}"
+LOG="${ROSE_LAUNCH_LOG:-$HOME/.local/share/rose/mocktail.log}"
+mkdir -p "$(dirname "$LOG")" 2>/dev/null
+if [[ -z "${MOCKTAIL_QUIET:-}" ]]; then
+    exec >>"$LOG" 2>&1
+fi
+printf '\n===== %s %s =====\n' "$(date '+%F %T')" "$*"
+
+# The wrapper itself may be the first "mocktail" on PATH, so the packaged
+# location wins and PATH is only a fallback that refuses to point back here.
+if [[ -z "${MOCKTAIL_BIN:-}" ]]; then
+    for candidate in /usr/bin/mocktail /usr/local/bin/mocktail; do
+        if [[ -x "$candidate" ]]; then MOCKTAIL_BIN="$candidate"; break; fi
+    done
+fi
+if [[ -z "${MOCKTAIL_BIN:-}" ]]; then
+    found="$(command -v mocktail 2>/dev/null || true)"
+    if [[ -n "$found" && "$found" != "$0" ]]; then MOCKTAIL_BIN="$found"; fi
+fi
+REAL="${MOCKTAIL_BIN:-/usr/bin/mocktail}"
+if [[ ! -x "$REAL" ]]; then
+    printf 'mocktail: %s is not installed\n' "$REAL" >&2
+    exit 127
+fi
+printf 'launcher: lib=%s real=%s\n' "$LIB" "$REAL"
+
+# setfpscap(0) in an older Rose saved a framerate cap of 0, and the engine presents
+# nothing at that cap: no window, on every launch, until the value is gone.
+settings="${XDG_DATA_HOME:-$HOME/.local/share}/mocktail/android/data/files/appData/GlobalBasicSettings_13.xml"
+if [[ -f $settings ]] && grep -q '<int name="FramerateCap">0</int>' "$settings"; then
+    sed -i 's|<int name="FramerateCap">0</int>|<int name="FramerateCap">-1</int>|' "$settings"
+fi
+
+# Mocktail checks for a newer Roblox on every start and prepares it when one is
+# published, which downloads the APK each time. The payload this module was
+# built for stays in use; set MOCKTAIL_SKIP_UPDATE_CHECK=0 to get the check back.
+export MOCKTAIL_SKIP_UPDATE_CHECK="${MOCKTAIL_SKIP_UPDATE_CHECK:-1}"
+
+# The catalog the executor supports, when the install carries one. Without it
+# Mocktail follows its own, which is what a plain install has.
+CATALOG="${ROSE_MOCKTAIL_CATALOG:-$HOME/.local/share/rose/mocktail-catalog.json}"
+catalog_env=()
+pin=0
+if [[ -n "${ROSE_PIN_CATALOG:-}" ]]; then
+    pin=1
+elif [[ -f /usr/share/mocktail/metadata/roblox_compatibility.json ]] &&
+     ! grep -q 'ade08266c67aee88ec9c1d00902150e1684dad3a' /usr/share/mocktail/metadata/roblox_compatibility.json; then
+    # A Mocktail newer than the one the profile was made for may have dropped
+    # this Build ID from its own catalog; ours still names it.
+    pin=1
+fi
+if [[ $pin -eq 1 && -f "$CATALOG" ]]; then
+    catalog_env=("--setenv=MOCKTAIL_UPDATE_COMPATIBILITY_PATH=$CATALOG"
+                 "--setenv=MOCKTAIL_COMPATIBILITY_MANIFEST=$CATALOG")
+    export MOCKTAIL_UPDATE_COMPATIBILITY_PATH="$CATALOG"
+    export MOCKTAIL_COMPATIBILITY_MANIFEST="$CATALOG"
+fi
+
+DISABLED="$HOME/.local/share/rose/disabled"
+preload=()
+if [[ -f "$DISABLED" ]]; then
+    printf 'mocktail: module disabled by %s, starting without Rose\n' "$DISABLED" >&2
+elif [[ -f "$LIB" ]]; then
+    preload=("LD_PRELOAD=${LD_PRELOAD:+$LD_PRELOAD:}$LIB")
+else
+    printf 'mocktail: %s is missing, starting without Rose\n' "$LIB" >&2
+fi
+
+# getcustomasset publishes into ExtraContent, which the payload tree keeps
+# read-only; this bridge moves what the executor staged into it while the
+# client is up.
+start_asset_bridge() {
+    local active="$HOME/.local/share/mocktail/current.json"
+    [[ -f "$active" ]] || return 0
+    local payload
+    payload=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["payload_path"])' "$active" 2>/dev/null) || return 0
+    [[ -n "$payload" ]] || return 0
+    local extra="$HOME/.local/share/mocktail/$payload/assets/ExtraContent"
+    [[ -d "$extra" ]] || return 0
+    mkdir -p "$extra/rose" /tmp/rose-assets 2>/dev/null
+    chmod u+w "$extra" "$extra/rose" 2>/dev/null
+    (
+        idle=0
+        shopt -s nullglob
+        while :; do
+            for staged in /tmp/rose-assets/*; do
+                mv -f "$staged" "$extra/rose/" 2>/dev/null
+            done
+            if pgrep -x Main >/dev/null 2>&1; then idle=0; else idle=$((idle + 1)); fi
+            [[ $idle -gt 10 ]] && break
+            sleep 1
+        done
+    ) >/dev/null 2>&1 &
+}
+start_asset_bridge
+
+# An own scope keeps the game off the caller's cgroup: systemd-oomd kills whole
+# cgroups under pressure and would otherwise take the launcher's scope with it.
+if [[ -z "${MOCKTAIL_NO_SCOPE:-}" ]] && command -v systemd-run >/dev/null 2>&1; then
+    env_args=()
+    for assignment in "${preload[@]}" "${catalog_env[@]}"; do
+        env_args+=("--setenv=$assignment")
+    done
+    if [[ -n "${MOCKTAIL_ASSET_PATH:-}" ]]; then
+        env_args+=("--setenv=MOCKTAIL_ASSET_PATH=$MOCKTAIL_ASSET_PATH")
+        env_args+=("--setenv=MOCKTAIL_ASSET_ROOT=$MOCKTAIL_ASSET_ROOT")
+    fi
+    if systemd-run --user --scope --collect --unit="mocktail-game-$$" \
+        "${env_args[@]}" "$REAL" "$@"; then
+        exit $?
+    fi
+    printf 'launcher: systemd-run failed, starting directly\n' >&2
+fi
+
+if [[ ${#preload[@]} -gt 0 ]]; then
+    exec env "${preload[0]}" "$REAL" "$@"
+fi
+exec "$REAL" "$@"
+

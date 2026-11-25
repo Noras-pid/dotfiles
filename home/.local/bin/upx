@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "$HOME/.local/opt/upx-5.0.2-amd64_linux/upx" "$@"

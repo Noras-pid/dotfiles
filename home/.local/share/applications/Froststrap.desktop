@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Froststrap
+Comment=Roblox bootstrapper
+Exec=/home/noras/.local/bin/froststrap %u
+TryExec=/home/noras/.local/bin/froststrap
+Icon=/home/noras/.local/opt/froststrap/squashfs-root/froststrap.png
+Terminal=false
+Categories=Game;
+MimeType=x-scheme-handler/roblox;x-scheme-handler/roblox-player;

@@ -1,0 +1,12 @@
+clipse
+deadlock-modmanager-bin
+elio
+exodus
+google-chrome
+millennium-git
+millennium-x86-git
+mocktail-bin
+opencode-beta
+python-pywal
+sklauncher-bin
+wayle-bin

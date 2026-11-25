@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUM_DIR="${RUM_DIR:-$HOME/asd/Rum}"
+RUM_BIN="${RUM_BIN:-$RUM_DIR/build-clang/roblox}"
+RUM_LIB="${RUM_LIB:-$HOME/asd/rr743/lib/x86_64/libroblox.so}"
+RUM_ASSETS="${RUM_ASSETS:-$HOME/asd/rr743/assets}"
+SESSION_FILE="$HOME/.local/share/rum/session"
+DEFAULT_PLACE="${RUM_DEFAULT_PLACE:-1818}"
+
+usage() {
+  cat <<'USAGE'
+rum login            save a .ROBLOSECURITY cookie (pasted, hidden); kept in ~/.local/share/rum/session, mode 600
+rum logout           delete the saved session
+rum whoami           show the account the saved session belongs to
+rum [place|uri]      launch a place id or roblox:// link with the saved session (default place: $RUM_DEFAULT_PLACE)
+rum --rose ...       same, with libRose.so preloaded
+USAGE
+}
+
+require_session() {
+  [[ -s "$SESSION_FILE" ]] || { echo "no saved session; run: rum login" >&2; exit 1; }
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  login)
+    read -rsp "paste .ROBLOSECURITY: " cookie; echo
+    [[ "$cookie" == _\|WARNING* ]] || { echo "that is not a .ROBLOSECURITY cookie" >&2; exit 1; }
+    umask 077
+    printf '%s' "$cookie" > "$SESSION_FILE"
+    "$0" whoami
+    exit 0 ;;
+  logout) rm -f "$SESSION_FILE"; echo "session removed"; exit 0 ;;
+  whoami)
+    require_session
+    curl -fsS -H "Cookie: .ROBLOSECURITY=$(<"$SESSION_FILE")" https://users.roblox.com/v1/users/authenticated \
+      || { echo "session rejected by roblox; run: rum login" >&2; exit 1; }
+    echo
+    exit 0 ;;
+esac
+
+preload=()
+if [[ "${1:-}" == "--rose" ]]; then
+  preload=(env LD_PRELOAD="$HOME/asd/Rose/build/libRose.so")
+  shift
+fi
+
+require_session
+target="${1:-$DEFAULT_PLACE}"
+[[ "$target" == roblox://* ]] || target="roblox://placeId=$target"
+
+ROBLOX_ROBLOSECURITY="$(<"$SESSION_FILE")" exec "${preload[@]}" "$RUM_BIN" \
+  --lib "$RUM_LIB" --assets "$RUM_ASSETS" --launch-uri "$target"

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AnixApp
+Comment=Десктопный клиент Anixart для просмотра аниме
+Exec=/home/noras/.local/bin/AnixApp.AppImage --no-sandbox %U
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Player;
+StartupWMClass=anixapp

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Cordial (Rose)
+GenericName=Roblox Player
+Comment=Play Roblox on Linux through Cordial, with Rose loaded
+Exec=/home/noras/.local/bin/rose-cordial %u
+Icon=applications-games
+Categories=Game;
+Terminal=false
+StartupNotify=false
+MimeType=x-scheme-handler/roblox;x-scheme-handler/roblox-player;
+X-Rose-Managed=true

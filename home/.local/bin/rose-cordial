@@ -1,0 +1,430 @@
+#!/usr/bin/env bash
+# Cordial with Rose inside it.
+#
+# usage: rose-cordial [roblox://... | roblox-player:...] [--place-id N]
+#        rose-cordial --stop | --status
+#        rose-cordial --fps [N | display]
+#
+# The client runs as a transient systemd USER SERVICE, not as a child of the
+# caller: closing a terminal (or the app launcher that started it) can never
+# end the game, and its own cgroup means systemd-oomd reaps the client, not the
+# desktop session. There is no memory cap unless ROSE_CORDIAL_MEMMAX sets one.
+# Where systemd-run is not available it falls back to a detached `setsid nohup` process.
+#
+# Everything resolves from $HOME and the XDG directories; nothing in here knows
+# which machine it was installed on.
+set -o pipefail
+
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
+ROSE_DIR="$DATA/rose"
+CORDIAL_DIR="$ROSE_DIR/cordial"
+LIB="$ROSE_DIR/libRose.so"
+DISABLED="$ROSE_DIR/disabled-cordial"
+LOG="${ROSE_CORDIAL_LOG:-$ROSE_DIR/cordial-client.log}"
+PIDFILE="$ROSE_DIR/cordial-client.pid"
+UNIT="rose-cordial"
+SHELL_BIN="$CORDIAL_DIR/bin/cordial-shell"
+RUN_BIN="$CORDIAL_DIR/bin/cordial-run"
+
+usage() {
+    cat <<'USAGE'
+usage: rose-cordial [roblox://... | roblox-player:...] [--place-id N]
+       rose-cordial --stop      stop the client this wrapper started
+       rose-cordial --status    print whether it is running (exit 0 if so)
+       rose-cordial --fps N     cap the frame rate at N from the next launch
+       rose-cordial --fps display   follow the display again; --fps alone shows it
+
+environment: ROSE_CORDIAL_PROFILE, ROSE_CORDIAL_MEMMAX (default none, e.g. 6G),
+             ROSE_CORDIAL_LOG, ROSE_CORDIAL_NO_SYSTEMD,
+             ROSE_CORDIAL_NO_HANDOFF=1 (restart on a link instead of handing it over),
+             CORDIAL_SECRET_STORE (default file; auto/keyring use the keyring),
+             ROSE_CORDIAL_GLES_NVIDIA=1 (GLES fallback on NVIDIA, untested)
+USAGE
+}
+
+say() {
+    printf 'rose-cordial: %s\n' "$*" >&2
+    mkdir -p "$(dirname "$LOG")" 2>/dev/null
+    printf '%s rose-cordial: %s\n' "$(date '+%F %T')" "$*" >>"$LOG" 2>/dev/null
+}
+
+# A desktop launcher swallows stderr, so an error would vanish without this.
+notify() {
+    [[ -t 2 ]] && return 0
+    command -v notify-send >/dev/null 2>&1 || return 0
+    notify-send -a Rose "Cordial" "$*" >/dev/null 2>&1 || true
+}
+
+action=start
+link=""
+place=""
+fps=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --stop) action=stop ;;
+        --status) action=status ;;
+        -h|--help) usage; exit 0 ;;
+        --fps)
+            action=fps
+            if [[ $# -ge 2 && $2 != -* ]]; then fps="$2"; shift; fi ;;
+        --fps=*) action=fps; fps="${1#--fps=}" ;;
+        --place-id)
+            if [[ $# -lt 2 || ! $2 =~ ^[0-9]{1,20}$ ]]; then
+                say "--place-id needs a number"; exit 2
+            fi
+            place="$2"; shift ;;
+        --place-id=*)
+            place="${1#--place-id=}"
+            if [[ ! $place =~ ^[0-9]{1,20}$ ]]; then say "--place-id needs a number"; exit 2; fi ;;
+        *)
+            # Any case, as Cordial takes it. Never quoted back: what lands here
+            # may be a link with a ticket in it, and `say` writes to the log.
+            case "${1,,}" in
+                roblox:*|roblox-player:*) link="$1" ;;
+                *) say "unrecognized argument (${#1} bytes, not shown)"; usage >&2; exit 2 ;;
+            esac ;;
+    esac
+    shift
+done
+
+# gameinfo is a one-time sign-in ticket, and --play skips the routing that would
+# redeem it, so all it would do is sit in this process's argv, the client's, and
+# the service unit for the whole session. Only the two ways of asking for it keep it.
+strip_ticket() {
+    # Keys in any case, because that is how cordial_runtime::deeplink reads them.
+    local lower=${1,,} before head rest
+    [[ $lower == *+gameinfo:* ]] || { printf '%s' "$1"; return; }
+    before=${lower%%+gameinfo:*}
+    head=${1:0:${#before}}
+    rest=${1:${#before}+10}
+    if [[ ${rest,,} =~ \+(launchmode|placelauncherurl|launchtime|browsertrackerid|robloxlocale|gamelocale|channel|launchexp):.*$ ]]; then
+        printf '%s%s' "$head" "${rest: -${#BASH_REMATCH[0]}}"
+    else
+        printf '%s' "$head"
+    fi
+}
+if [[ -n $link && ${CORDIAL_DEEPLINK_CARRY_TICKET:-} != 1 ]] &&
+    ! grep -qs '"carry_launch_ticket": *true' "$CORDIAL_DIR/shell.json"; then
+    link="$(strip_ticket "$link")"
+fi
+
+# Cordial itself refuses a link over 2048 bytes or with anything but printable
+# ASCII; saying so here is kinder than a client that exits without a window.
+# After the ticket has gone, because the ticket is not what is carried.
+if [[ -n $link ]]; then
+    if [[ ${#link} -gt 2048 ]] || [[ -n "$(printf '%s' "$link" | LC_ALL=C tr -d '[:graph:]')" ]]; then
+        say "the link is longer than 2048 bytes or has characters Cordial refuses"
+        notify "This Roblox link is too long or has characters Cordial refuses."
+        exit 2
+    fi
+fi
+
+profile="${ROSE_CORDIAL_PROFILE:-}"
+if [[ -z $profile && -r $CORDIAL_DIR/profile ]]; then
+    IFS= read -r profile <"$CORDIAL_DIR/profile" || true
+fi
+profile="${profile//[[:space:]]/}"
+profile="${profile:-rose}"
+if [[ ! $profile =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+    say "'$profile' is not a valid Cordial profile name (letters, digits, - and _)"; exit 2
+fi
+PROFILE_ROOT="${CORDIAL_PROFILE_ROOT:-$DATA/cordial/profiles}"
+LOCK="$PROFILE_ROOT/$profile/.lock"
+
+have_systemd() {
+    [[ -z ${ROSE_CORDIAL_NO_SYSTEMD:-} ]] || return 1
+    command -v systemd-run >/dev/null 2>&1 && command -v systemctl >/dev/null 2>&1 &&
+        systemctl --user show-environment >/dev/null 2>&1
+}
+
+unit_active() {
+    command -v systemctl >/dev/null 2>&1 &&
+        systemctl --user is-active --quiet "$UNIT.service" 2>/dev/null
+}
+
+# Cordial's own test: cordial-run holds an exclusive lock on the profile's
+# .lock for as long as it lives, and the kernel drops it on any exit. The file
+# staying behind proves nothing, so it has to be probed, not looked at. flock
+# would create a missing file, hence the existence check first.
+lock_held() {
+    [[ -e $LOCK ]] || return 1
+    command -v flock >/dev/null 2>&1 || return 1
+    flock -n -E 200 "$LOCK" true 2>/dev/null
+    [[ $? -eq 200 ]]
+}
+
+# is-active says "deactivating" is not active, but systemd-run still refuses the
+# name until the unit is gone, and that refusal must not read as "no systemd".
+unit_present() {
+    command -v systemctl >/dev/null 2>&1 || return 1
+    case "$(systemctl --user show -p ActiveState --value "$UNIT.service" 2>/dev/null)" in
+        active|activating|reloading|deactivating) return 0 ;;
+    esac
+    return 1
+}
+
+busy() { unit_present || lock_held; }
+
+stop_client() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user stop "$UNIT.service" >/dev/null 2>&1
+        systemctl --user reset-failed "$UNIT.service" >/dev/null 2>&1
+    fi
+    # Only a group this wrapper created: the pid file names a session leader
+    # started by `setsid`, and it is checked to still be a cordial-shell.
+    if [[ -r $PIDFILE ]]; then
+        local pid
+        pid="$(<"$PIDFILE")"
+        if [[ $pid =~ ^[0-9]+$ && "$(cat "/proc/$pid/comm" 2>/dev/null)" == cordial-shell ]]; then
+            kill -TERM -- "-$pid" 2>/dev/null
+            for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+                kill -0 "$pid" 2>/dev/null || break
+                sleep 0.25
+            done
+            kill -0 "$pid" 2>/dev/null && kill -KILL -- "-$pid" 2>/dev/null
+        fi
+        rm -f "$PIDFILE"
+    fi
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+        lock_held || break
+        sleep 0.25
+    done
+}
+
+show_status() {
+    local state=stopped pid=""
+    if unit_active; then
+        state=running
+        pid="$(systemctl --user show -p MainPID --value "$UNIT.service" 2>/dev/null)"
+    elif [[ -r $PIDFILE ]]; then
+        pid="$(<"$PIDFILE")"
+        if [[ $pid =~ ^[0-9]+$ && "$(cat "/proc/$pid/comm" 2>/dev/null)" == cordial-shell ]]; then
+            state=running
+        else
+            pid=""
+        fi
+    fi
+    lock_held && state=running
+    printf 'state: %s\nprofile: %s\n' "$state" "$profile"
+    [[ -n $pid && $pid != 0 ]] && printf 'pid: %s\n' "$pid"
+    [[ $state == running ]]
+}
+
+set_fps() {
+    local flags="$PROFILE_ROOT/$profile/flags.json" key=DFIntTaskSchedulerTargetFps
+    local settings="$PROFILE_ROOT/$profile/data/files/appData/GlobalBasicSettings_13.xml"
+    if [[ -z $fps ]]; then
+        local now=""
+        [[ -s $flags ]] && now="$(jq -r --arg k "$key" '.[$k] // empty' "$flags" 2>/dev/null)"
+        printf 'fps cap: %s\n' "${now:-display refresh}"
+        return 0
+    fi
+    command -v jq >/dev/null 2>&1 || { say "--fps needs jq"; return 1; }
+    fps="${fps,,}"
+    if [[ $fps != display && ! ( $fps =~ ^[0-9]{1,4}$ && $fps -ge 15 && $fps -le 1000 ) ]]; then
+        say "--fps wants a number from 15 to 1000, or display"; return 2
+    fi
+    if [[ -s $flags ]] && ! jq -e 'type == "object"' "$flags" >/dev/null 2>&1; then
+        say "$flags is not a JSON object; fix or remove it first"; return 1
+    fi
+    mkdir -p "$PROFILE_ROOT/$profile" || return 1
+    local current='{}'
+    [[ -s $flags ]] && current="$(<"$flags")"
+    if [[ $fps == display ]]; then
+        jq --arg k "$key" 'del(.[$k])' <<<"$current" >"$flags.new"
+    else
+        jq --arg k "$key" --arg v "$fps" '.[$k] = $v' <<<"$current" >"$flags.new"
+    fi || { rm -f "$flags.new"; return 1; }
+    mv -f "$flags.new" "$flags" || return 1
+    if [[ -f $settings ]] && ! busy; then
+        sed -i -E 's|<int name="FramerateCap">[0-9]+</int>|<int name="FramerateCap">-1</int>|' "$settings"
+    fi
+    printf 'fps cap: %s\n' "$( [[ $fps == display ]] && echo 'display refresh' || echo "$fps")"
+    busy && printf 'the running game keeps its cap until it is restarted (rose-cordial --stop, then start it again)\n'
+    return 0
+}
+
+case "$action" in
+    stop) stop_client; exit 0 ;;
+    status) show_status; exit $? ;;
+    fps) set_fps; exit $? ;;
+esac
+
+# One launch at a time. Two clicks otherwise each stop the client the other just
+# started, and the later one unlinks the sockets the earlier client has bound.
+mkdir -p "$ROSE_DIR" 2>/dev/null
+if command -v flock >/dev/null 2>&1 && exec 9>"$ROSE_DIR/.launch.lock"; then
+    flock -w 120 9 || { say "another launch is still in progress"; exit 1; }
+fi
+
+if [[ ! -x $SHELL_BIN || ! -x $RUN_BIN ]]; then
+    say "Cordial is not installed in $CORDIAL_DIR/bin; open the Rose menu and install it"
+    notify "Cordial is not installed. Open the Rose menu and install it."
+    exit 127
+fi
+
+if busy; then
+    if [[ -n $link ]]; then
+        # First hand the link to the client that is already running: Cordial's
+        # --handoff (its ADR-066) gives it to that client over its control
+        # socket, the game switches in place and nothing restarts. The link goes
+        # as one argument, never through a shell, as it does below. 75 means
+        # that client could not take it, 2 is a Cordial from before --handoff and
+        # 124 is the timeout; for each of those the restart below is still how
+        # the click lands. 65 means Cordial refused the link itself, so a
+        # restart on it would not join either, and the game is kept.
+        # ROSE_CORDIAL_NO_HANDOFF=1 skips this, which is the control.
+        if [[ -z ${ROSE_CORDIAL_NO_HANDOFF:-} ]]; then
+            handoff=("$SHELL_BIN" --profile "$profile" --handoff "$link")
+            command -v timeout >/dev/null 2>&1 && handoff=(timeout 25 "${handoff[@]}")
+            handoff_status=0
+            "${handoff[@]}" >>"$LOG" 2>&1 </dev/null || handoff_status=$?
+            case $handoff_status in
+                0)
+                    say "handed the link to the running client (profile $profile)"
+                    exit 0
+                    ;;
+                65)
+                    say "Cordial refused this link; the running game is kept"
+                    notify "Cordial could not read this Roblox link."
+                    exit 1
+                    ;;
+            esac
+            say "the running client could not take the link (status $handoff_status)"
+        fi
+        # Otherwise the only way a click can do what the user meant by it is to
+        # restart on the link. That used to print "close the game first", which
+        # asked them to do these same two steps by hand.
+        say "profile '$profile' is already open; restarting it on this link"
+        notify "Cordial is restarting to open the link."
+        stop_client
+        # The lock is handed back when the process group goes, but the service
+        # unit can linger for a moment after; the launch below would then see
+        # the profile as still busy.
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+            busy || break
+            sleep 0.5
+        done
+        # Held with no unit means a client this wrapper cannot stop, and the new
+        # one would be refused the profile after this has said "started".
+        if lock_held && ! unit_present; then
+            say "profile '$profile' is held by a client this wrapper did not start"
+            notify "Another Cordial client has this profile open. Close it and open the link again."
+            exit 1
+        fi
+    else
+        say "Cordial is already running (profile $profile); use --stop first to restart it"
+        exit 0
+    fi
+fi
+
+# setfpscap(0) in an older Rose saved a framerate cap of 0, and the engine presents
+# nothing at that cap: no window, on every launch, until the value is gone.
+settings="$PROFILE_ROOT/$profile/data/files/appData/GlobalBasicSettings_13.xml"
+if [[ -f $settings ]] && grep -q '<int name="FramerateCap">0</int>' "$settings"; then
+    sed -i 's|<int name="FramerateCap">0</int>|<int name="FramerateCap">-1</int>|' "$settings"
+fi
+
+# Whatever a previous run left behind would be answered by nobody.
+export ROSE_SOCKET="${ROSE_SOCKET:-/tmp/rose-cordial.sock}"
+export ROSE_ORACLE_SOCKET="${ROSE_ORACLE_SOCKET:-/tmp/rose-cordial-oracle.sock}"
+export ROSE_LOG="${ROSE_LOG:-/tmp/rose-cordial.log}"
+rm -f "$ROSE_SOCKET" "$ROSE_ORACLE_SOCKET" "$ROSE_LOG" "$PIDFILE"
+
+# Both logs describe the session, and /tmp is shared. Rose opens its own with
+# O_CREAT 0644, which only applies if the file is not already there.
+(umask 077; : >"$ROSE_LOG") 2>/dev/null
+mkdir -p "$(dirname "$LOG")" 2>/dev/null
+# The run a click replaces is usually the run that failed, and the one before
+# it often is too: a GLES fallback gets relaunched twice in a minute, and with
+# a single .1 the failing run's log was gone by the second click.
+if [[ -s $LOG ]]; then
+    for n in 3 2 1; do
+        [[ -e $LOG.$n ]] && mv -f "$LOG.$n" "$LOG.$((n + 1))"
+    done
+    mv -f "$LOG" "$LOG.1"
+fi
+: >"$LOG"
+chmod 600 "$LOG" 2>/dev/null
+
+# Cordial's own settings for this install, kept apart from the user's:
+# automatic updates stay off so the pinned Roblox build is never replaced.
+export CORDIAL_SHELL_CONFIG="$CORDIAL_DIR/shell.json"
+if [[ ! -f $CORDIAL_SHELL_CONFIG ]]; then
+    printf '%s\n' '{"automatic_updates":"manual"}' >"$CORDIAL_SHELL_CONFIG.new" &&
+        mv -f "$CORDIAL_SHELL_CONFIG.new" "$CORDIAL_SHELL_CONFIG"
+fi
+if [[ ! -s $PROFILE_ROOT/$profile/roblox-version ]]; then
+    say "warning: profile '$profile' has no pinned Roblox build; import it from the Rose menu"
+fi
+
+# Keep the session in the profile's 0600 file. Nothing unlocks the keyring at
+# login, so a client started right after boot finds it locked, reads the empty
+# file instead and the user lands signed out.
+export CORDIAL_SECRET_STORE="${CORDIAL_SECRET_STORE:-file}"
+
+export PATH="$CORDIAL_DIR/bin:$PATH"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+# Opt-in, untested: when the engine falls back from Vulkan to GLES3, glvnd hands
+# it Mesa on the iGPU of a hybrid laptop. ROSE_CORDIAL_GLES_NVIDIA=1 asks for
+# NVIDIA's EGL instead (PRIME render offload). It applies to the whole
+# process tree, the launcher window included.
+nv_egl=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+if [[ ${ROSE_CORDIAL_GLES_NVIDIA:-} == 1 && -r $nv_egl && -e /dev/nvidia0 ]]; then
+    export __NV_PRIME_RENDER_OFFLOAD=1 __EGL_VENDOR_LIBRARY_FILENAMES="$nv_egl"
+fi
+
+if [[ -f $DISABLED ]]; then
+    say "module disabled by $DISABLED, starting without Rose"
+elif [[ -f $LIB ]]; then
+    export LD_PRELOAD="${LD_PRELOAD:+$LD_PRELOAD:}$LIB"
+else
+    say "$LIB is missing, starting without Rose"
+fi
+
+cmd=("$SHELL_BIN" --profile "$profile" --play --set automatic_updates=manual)
+[[ -n $place ]] && cmd+=(--place-id "$place")
+# The link goes last and as one argument, never through a shell.
+[[ -n $link ]] && cmd+=("$link")
+
+PASS_ENV=(HOME PATH WAYLAND_DISPLAY DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS
+          XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP HYPRLAND_INSTANCE_SIGNATURE
+          LD_PRELOAD ROSE_SOCKET ROSE_ORACLE_SOCKET ROSE_LOG ROSE_DEV CORDIAL_SHELL_CONFIG
+          CORDIAL_PROFILE_ROOT CORDIAL_X11 CORDIAL_DEV_CONTROL CORDIAL_MIRROR_URL
+          CORDIAL_DEEPLINK_CARRY_TICKET CORDIAL_DEEPLINK_PROBE
+          CORDIAL_TRACE_MOUSE CORDIAL_NO_AGDK_TOUCH
+          XDG_DATA_HOME XDG_CONFIG_HOME XDG_CACHE_HOME
+          DRI_PRIME __NV_PRIME_RENDER_OFFLOAD __GLX_VENDOR_LIBRARY_NAME __VK_LAYER_NV_optimus
+          VK_ICD_FILENAMES VK_DRIVER_FILES MESA_VK_DEVICE_SELECT
+          __EGL_VENDOR_LIBRARY_FILENAMES GSK_RENDERER)
+
+if have_systemd; then
+    sd=(systemd-run --user "--unit=$UNIT" --collect --quiet "--description=Cordial client with Rose"
+        -p "MemoryMax=${ROSE_CORDIAL_MEMMAX:-infinity}" -p MemorySwapMax=infinity -p KillMode=control-group
+        -p "StandardOutput=append:$LOG" -p "StandardError=append:$LOG"
+        -p "ExecStopPost=/bin/sh -c 'if [ \"\$\$SERVICE_RESULT\" = oom-kill ]; then cp -f \"$LOG\" \"$LOG.oom\"; notify-send -u critical -a Rose Cordial \"The game ran out of memory (cap ${ROSE_CORDIAL_MEMMAX:-none}) and was killed.\"; fi'")
+    for name in "${PASS_ENV[@]}"; do
+        [[ -n ${!name:-} ]] && sd+=("--setenv=$name")
+    done
+    # systemd reads `$` in a command line as an expansion; a doubled one is
+    # the literal. `%` needs no such care, systemd-run escapes it itself.
+    if "${sd[@]}" -- "${cmd[@]//\$/\$\$}"; then
+        say "started as $UNIT.service (profile $profile)"
+        exit 0
+    fi
+    # The unit is still going down. Starting outside it would drop the memory cap
+    # and then be refused the profile, after this has said "started".
+    if unit_present; then
+        say "the previous client has not finished stopping; not starting a second one"
+        notify "Cordial is still closing. Open the link again in a moment."
+        exit 1
+    fi
+    say "systemd-run failed, starting without a service"
+fi
+
+setsid nohup "${cmd[@]}" >>"$LOG" 2>&1 </dev/null 9>&- &
+echo $! >"$PIDFILE"
+disown 2>/dev/null
+say "started detached (profile $profile, pid $!)"
+exit 0

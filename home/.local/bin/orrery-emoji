@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+choice="$(printf "%s\n" "❤️ heart" "✨ sparkles" "😊 smile" "😂 laugh" "🥹 touched" "🔥 fire" "👍 thumbs up" "👀 eyes" "🎉 party" "😭 cry" "😎 cool" "💙 blue heart" "🤍 white heart" "🌙 moon" "🌸 flower" "🫶 hands" "💀 skull" "🙏 thanks" "✅ yes" "❌ no" "🚀 rocket" | fuzzel --dmenu --prompt="Emoji > ")" || exit 0
+[[ -n "$choice" ]] || exit 0
+printf "%s" "${choice%% *}" | wl-copy

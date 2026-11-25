@@ -1,0 +1,18 @@
+[Unit]
+Description=Close dGPU client apps one by one before the session is torn down (nvidia mass-kill freeze)
+# stop order is the reverse of start order: After= makes this stop BEFORE the
+# user manager, while Hyprland is still alive and apps quit like a manual close
+After=user@1000.service systemd-user-sessions.service
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+ExecStop=/usr/local/sbin/gpu-clients-stop
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

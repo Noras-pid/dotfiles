@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""Alliance (or peace) with every known empire in Spore's Space stage, through the SporeKit devkit
+console of SporeCoop (127.0.0.1:47800, the same commands as `coop space diplomacy ...` in Ctrl+Shift+C).
+
+  spore-ally-all            alliance with every empire `coop.space diplomacy list` shows
+  spore-ally-all --peace    only peace, no alliance
+  spore-ally-all --all      every empire of the galaxy (`list all`, at most 60), not only known ones
+  spore-ally-all --local    not shared with the co-op partner
+  spore-ally-all --dry      only print the empires
+  spore-ally-all --peace --wars-only --skip grox --gift 2
+                            peace with every empire at war except the Grox, then 2 gifts' worth of relation
+  spore-ally-all --raise 1 --skip grox --skip "'s empire"
+                            no peace/alliance call: lift every empire below relation +1 with the game's
+                            "gave a gift" events, then "completed a mission" events, until it gets there
+"""
+import argparse
+import json
+import re
+import socket
+import sys
+
+EMPIRE = re.compile(r"^empire ([0-9A-Fa-f]{8}) '(.*)' home=(\d+) rel=(-?[\d.]+) flags=(\d+)")
+
+
+class Console:
+    def __init__(self, port, timeout):
+        self.sock = socket.create_connection(('127.0.0.1', port), timeout=3)
+        self.sock.settimeout(timeout)
+        self.buf = b''
+
+    def call(self, line):
+        self.sock.sendall(line.encode('utf-8') + b'\n')
+        while b'\n' not in self.buf:
+            chunk = self.sock.recv(65536)
+            if not chunk:
+                raise ConnectionError('the console closed the connection')
+            self.buf += chunk
+        raw, self.buf = self.buf.split(b'\n', 1)
+        reply = json.loads(raw.decode('utf-8', 'replace'))
+        return bool(reply.get('ok')), str(reply.get('out', ''))
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--peace', action='store_true', help='declare peace instead of an alliance')
+    ap.add_argument('--all', action='store_true', help='every empire of the galaxy, not only known ones')
+    ap.add_argument('--local', action='store_true', help='do not share the change with the co-op partner')
+    ap.add_argument('--dry', action='store_true', help='only list the empires')
+    ap.add_argument('--skip', action='append', default=[], metavar='NAME',
+                    help='leave out empires whose name contains NAME (case-insensitive, repeatable)')
+    ap.add_argument('--wars-only', action='store_true', help='only the empires at war with the player')
+    ap.add_argument('--gift', type=int, default=0, metavar='N',
+                    help='afterwards apply the game\'s "gave a gift" relation event N times to each (0-20)')
+    ap.add_argument('--raise', dest='raise_to', type=float, metavar='R',
+                    help='only lift relations below R with gift / mission events (no peace or alliance call)')
+    ap.add_argument('--port', type=int, default=47800, help='SporeKit console port (default 47800)')
+    ap.add_argument('--timeout', type=float, default=30.0)
+    args = ap.parse_args()
+
+    try:
+        con = Console(args.port, args.timeout)
+    except OSError as e:
+        print(f'cannot connect to 127.0.0.1:{args.port}: {e} (is Spore with SporeCoop running?)', file=sys.stderr)
+        return 2
+
+    ok, out = con.call('coop.space diplomacy list all' if args.all else 'coop.space diplomacy list')
+    if not ok:
+        print(out.strip() or 'the list command failed', file=sys.stderr)
+        return 1
+    empires = []
+    for line in out.splitlines():
+        m = EMPIRE.match(line.strip())
+        if m:
+            empires.append((m.group(1).upper(), m.group(2), float(m.group(4)), int(m.group(5))))
+        elif line.startswith('player '):
+            print(line.strip())
+    if not empires:
+        print('no empires in the list (not in the Space stage, or none met yet; try --all)')
+        return 1
+    if not 0 <= args.gift <= 20:
+        print('--gift must be 0..20', file=sys.stderr)
+        return 2
+    skip = [x.lower() for x in args.skip]
+    picked = [e for e in empires
+              if not any(x in e[1].lower() for x in skip) and (not args.wars_only or e[3] & 1)]
+    for pol, name, rel, flags in empires:
+        if (pol, name, rel, flags) not in picked and not args.dry:
+            print(f'skip {pol} {name}')
+    empires = picked
+
+    verb = 'peace' if args.peace else 'ally'
+    prefix = 'coop.space diplomacy ' + ('local ' if args.local else '')
+    failed = 0
+    if args.raise_to is not None and not args.dry:
+        return raise_all(con, prefix, empires, args.raise_to)
+    for pol, name, rel, flags in empires:
+        if args.dry:
+            state = 'war' if flags & 1 else 'ally' if flags & 2 else '-'
+            print(f'{pol}  rel={rel:+.2f}  {state:4s}  {name}')
+            continue
+        ok, out = con.call(f'{prefix}{verb} {pol}')
+        text = out.strip()
+        if not ok or text.startswith('no such empire') or text.startswith('usage'):
+            failed += 1
+            print(f'FAIL {pol} {name}: {text}')
+            continue
+        print(text)
+        for _ in range(args.gift):
+            ok, out = con.call(f'{prefix}apply {pol}')
+            if not ok or out.strip().startswith(('no such empire', 'usage')):
+                print(f'  gift FAIL {pol}: {out.strip()}')
+                break
+        if args.gift:
+            print(f'  after {args.gift} gift(s): {out.strip()}')
+    if not args.dry:
+        print(f'{len(empires) - failed} of {len(empires)} empires: {verb}')
+    return 1 if failed else 0
+
+
+REL = re.compile(r"rel=(-?[\d.]+)")
+GIFT, MISSION = '0526E51F', '0526E519'
+
+
+def raise_all(con, prefix, empires, target):
+    low = [e for e in empires if e[2] < target]
+    print(f'{len(low)} of {len(empires)} empires below {target:+.2f}')
+    reached = 0
+    for pol, name, rel, flags in low:
+        start = rel
+        for event in (GIFT, MISSION):
+            for _ in range(12):
+                if rel >= target:
+                    break
+                ok, out = con.call(f'{prefix}apply {pol} {event}')
+                m = REL.search(out)
+                if not ok or not m:
+                    print(f'FAIL {pol} {name}: {out.strip()}')
+                    break
+                new = float(m.group(1))
+                if new <= rel + 1e-3:
+                    break
+                rel = new
+        reached += rel >= target
+        print(f'{pol} {start:+.2f} -> {rel:+.2f}  {name}')
+    print(f'{reached} of {len(low)} raised to {target:+.2f} or more')
+    return 0 if reached == len(low) else 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

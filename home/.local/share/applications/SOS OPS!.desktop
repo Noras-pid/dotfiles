@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=SOS OPS!
+Comment=Play this game on Steam
+Exec=steam steam://rungameid/2475460
+Icon=steam_icon_2475460
+Terminal=false
+Type=Application
+Categories=Game;

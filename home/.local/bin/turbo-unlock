@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# turbo-unlock on|off|watch|status — Turbo Boost on this Acer Nitro 5 without a battery.
+#
+# The firmware sets "Turbo Mode Disable" (bit 38 of MSR 0x1A0, IA32_MISC_ENABLE)
+# on every core when no battery is found, so intel_pstate refuses no_turbo=0
+# ("Operation not permitted"). `on` clears that bit, makes intel_pstate re-read
+# it, allows turbo and caps the clock at MAX_MHZ (3100 = the i5-7300HQ all-core
+# turbo: every core holds it, no 3.5 GHz single-core spikes that draw the most).
+# `watch` (turbo-unlock.service) checks every 2 s and puts it all back when the
+# firmware/EC locks turbo again (under load, on resume, on adapter events).
+# `off` stops the watcher and gives the firmware its state back.
+#
+# Risk: without a battery, a CPU + GPU peak can exceed what the adapter gives
+# and the laptop powers off. The CPU power caps below keep that in check.
+# Needs root (sudo) and msr-tools.
+set -euo pipefail
+
+MSR=0x1a0 BIT=38
+PST=/sys/devices/system/cpu/intel_pstate
+RAPL=/sys/class/powercap/intel-rapl:0
+MAX_MHZ=${MAX_MHZ:-3100}
+# floor so the clock never drops below all-core turbo (0 = leave it to the governor)
+MIN_MHZ=${MIN_MHZ:-0}
+# Intel iGPU clock floor in MHz (0 = leave it to i915)
+GT_MIN_MHZ=${GT_MIN_MHZ:-0}
+# CPU power caps (W) while turbo is on: keep CPU+GPU peaks under what the adapter
+# gives without a battery. Firmware defaults are 45/56 W.
+GAME_PL1=${GAME_PL1:-35} GAME_PL2=${GAME_PL2:-40}
+DEF_PL1=45 DEF_PL2=56
+INTERVAL=${INTERVAL:-2}
+
+need_root() { [[ $EUID -eq 0 ]] || { echo "запусти через sudo: sudo $0 $*" >&2; exit 1; }; }
+have_tools() { command -v rdmsr >/dev/null && command -v wrmsr >/dev/null || { echo "нужен пакет msr-tools: sudo pacman -S msr-tools" >&2; exit 1; }; }
+cores() { seq 0 $(( $(nproc --all) - 1 )); }
+locked_on() { (( ( 0x$(rdmsr -p "$1" $MSR) >> BIT ) & 1 )); }
+locked() { for c in $(cores); do locked_on "$c" && return 0; done; return 1; }
+pl_ok() { [[ $(cat $RAPL/constraint_0_power_limit_uw) == $(( GAME_PL1 * 1000000 )) && $(cat $RAPL/constraint_1_power_limit_uw) == $(( GAME_PL2 * 1000000 )) ]]; }
+set_pl() { echo $(( $1 * 1000000 )) > $RAPL/constraint_0_power_limit_uw; echo $(( $2 * 1000000 )) > $RAPL/constraint_1_power_limit_uw; }
+cap_ok() { for f in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_max_freq; do [[ $(cat "$f") == $(( MAX_MHZ * 1000 )) ]] || return 1; done; }
+set_cap() { for f in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_max_freq; do echo $(( $1 * 1000 )) > "$f"; done; }
+min_ok() { for f in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_min_freq; do [[ $(cat "$f") == $(( MIN_MHZ * 1000 )) ]] || return 1; done; }
+set_min() { for f in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_min_freq; do echo $(( $1 * 1000 )) > "$f"; done; }
+gt_dir() { for c in /sys/class/drm/card[0-9]; do [[ -f $c/gt_min_freq_mhz ]] && { echo "$c"; return 0; }; done; return 1; }
+gt_ok() { local c; c=$(gt_dir) || return 0; [[ $(cat "$c/gt_min_freq_mhz") == "$GT_MIN_MHZ" ]]; }
+set_gt() { local c; c=$(gt_dir) || return 0; echo "$1" > "$c/gt_min_freq_mhz"; }
+hw_min_mhz() { echo $(( $(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq) / 1000 )); }
+hw_max_mhz() { echo $(( $(cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq) / 1000 )); }
+
+unlock() {
+    for c in $(cores); do
+        locked_on "$c" && wrmsr -p "$c" $MSR $(( 0x$(rdmsr -p "$c" $MSR) & ~(1 << BIT) ))
+    done
+    # intel_pstate caches the lock at start: re-initialise it, then allow turbo
+    if ! echo 0 > $PST/no_turbo 2>/dev/null; then
+        echo off > $PST/status; echo active > $PST/status
+        echo 0 > $PST/no_turbo
+    fi
+    set_pl "$GAME_PL1" "$GAME_PL2"
+    set_cap "$MAX_MHZ"
+    (( MIN_MHZ )) && set_min "$MIN_MHZ"
+    (( GT_MIN_MHZ )) && set_gt "$GT_MIN_MHZ"
+    return 0
+}
+
+status() {
+    printf 'турбо: %s\n' "$( [[ $(cat $PST/no_turbo) == 0 ]] && echo включено || echo выключено )"
+    if [[ $EUID -eq 0 ]] && command -v rdmsr >/dev/null; then
+        modprobe msr
+        printf 'блокировка прошивки (MSR 0x1A0 бит 38): %s\n' "$(locked && echo стоит || echo снята)"
+    fi
+    printf 'сторож: %s\n' "$(systemctl is-active turbo-unlock.service 2>/dev/null || true)"
+    printf 'частоты: '; awk '/MHz/{printf "%.2f ", $4/1000}' /proc/cpuinfo; echo ГГц
+    printf 'лимит CPU: %s/%s Вт\n' "$(( $(cat $RAPL/constraint_0_power_limit_uw) / 1000000 ))" "$(( $(cat $RAPL/constraint_1_power_limit_uw) / 1000000 ))"
+    printf 'минимум: %s МГц\n' "$(( $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq) / 1000 ))"
+    c=$(gt_dir) && printf 'встройка: %s-%s МГц\n' "$(cat "$c/gt_min_freq_mhz")" "$(cat "$c/gt_max_freq_mhz")"
+    printf 'максимум: %s МГц\n' "$(( $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) / 1000 ))"
+}
+
+case "${1:-status}" in
+    on)
+        need_root on; have_tools; modprobe msr
+        unlock
+        status ;;
+    watch)
+        need_root watch; have_tools; modprobe msr
+        unlock
+        echo "турбо включено, потолок ${MAX_MHZ} МГц, лимит ${GAME_PL1}/${GAME_PL2} Вт; проверка каждые ${INTERVAL} с"
+        while sleep "$INTERVAL"; do
+            why=()
+            locked && why+=("прошивка поставила блокировку")
+            [[ $(cat $PST/no_turbo) == 0 ]] || why+=("no_turbo=1")
+            cap_ok || why+=("сбит потолок частоты")
+            pl_ok || why+=("сбит лимит мощности")
+            (( MIN_MHZ )) && ! min_ok && why+=("сбита минимальная частота")
+            (( GT_MIN_MHZ )) && ! gt_ok && why+=("сбита частота встройки")
+            (( ${#why[@]} )) || continue
+            echo "восстанавливаю: ${why[*]}"
+            unlock
+        done ;;
+    off)
+        need_root off; have_tools; modprobe msr
+        systemctl stop turbo-unlock.service 2>/dev/null || true
+        set_min "$(hw_min_mhz)" || true
+        c=$(gt_dir) && set_gt "$(cat "$c/gt_RPn_freq_mhz")" || true
+        set_cap "$(hw_max_mhz)" || true
+        echo 1 > $PST/no_turbo || true
+        for c in $(cores); do
+            wrmsr -p "$c" $MSR $(( 0x$(rdmsr -p "$c" $MSR) | (1 << BIT) ))
+        done
+        set_pl $DEF_PL1 $DEF_PL2
+        status ;;
+    status) status ;;
+    *) echo "usage: turbo-unlock on|off|watch|status" >&2; exit 1 ;;
+esac

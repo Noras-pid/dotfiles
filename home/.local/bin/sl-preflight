@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Run right before launching SCP:SL on a new account.
+# Checks the things that got the previous accounts banned.
+S=/home/noras/.local/share/Steam
+FAIL=0
+ok(){ printf '  \033[32mOK\033[0m   %s\n' "$1"; }
+no(){ printf '  \033[31mFAIL\033[0m %s\n' "$1"; FAIL=1; }
+wr(){ printf '  \033[33mWARN\033[0m %s\n' "$1"; }
+
+echo "== 1. network =="
+J=$(curl -s --max-time 10 https://ipinfo.io/json)
+IP=$(printf '%s' "$J" | grep -oP '"ip": "\K[^"]+')
+ORG=$(printf '%s' "$J" | grep -oP '"org": "\K[^"]+')
+echo "  $IP  $ORG"
+DC='Constant|Vultr|DigitalOcean|Linode|Hetzner|OVH|M247|Datacamp|Choopa|Amazon|Google LLC|Microsoft|Leaseweb|Contabo|Scaleway|G-Core|Zenlayer|Cogent|PacketHub|Oracle'
+if [ -z "$ORG" ]; then no "could not read the public IP"
+elif printf '%s' "$ORG" | grep -qiE "$DC"; then
+  no "datacenter / VPN ASN. SL blocks these for new accounts unless the account is >2 months old, Steam level >0, or has owned SL >2 weeks. Use a PHONE HOTSPOT, not a VPN."
+elif printf '%s' "$ORG" | grep -q "47898"; then
+  no "your home ISP (AS47898) - every banned account launched from here"
+else ok "consumer ASN, not your home line"; fi
+
+echo "== 2. account =="
+read -r CUR NAME < <(python3 - <<'PYEOF'
+import re,pathlib
+reg=pathlib.Path("/home/noras/.steam/registry.vdf").read_text(errors="ignore")
+m=re.search(r'"AutoLoginUser"\s+"([^"]*)"',reg); name=m.group(1) if m else ""
+cfg=pathlib.Path("/home/noras/.local/share/Steam/config/config.vdf").read_text(errors="ignore")
+sid=""
+mm=re.search(r'"\s*'+re.escape(name)+r'"\s*\{\s*"SteamID"\s+"(\d+)"',cfg)
+if mm: sid=mm.group(1)
+print(sid,name)
+PYEOF
+)
+echo "  logged in: ${NAME:-?} ($CUR)"
+BURNED="76561198602669849 76561199062034913 76561198604615380 76561199527047728 76561198606294400 76561198602901323 76561198786616085 76561199057059274 76561199276630716"
+case " $BURNED " in
+  *" $CUR "*) no "this account already launched SL on this machine" ;;
+  "")         no "could not read the logged-in account" ;;
+  *)          ok "account is new to SL here" ;;
+esac
+
+echo "== 3. license =="
+M="$S/steamapps/appmanifest_700330.acf"
+if [ ! -f "$M" ]; then wr "no manifest yet - install SL on this account, then rerun"; FAIL=1
+else
+  OWNER=$(grep -oP '"LastOwner"\s+"\K[0-9]+' "$M")
+  FOREIGN=$(python3 -c "
+import re,sys
+t=open('$M',errors='ignore').read()
+m=re.search(r'\"SharedDepots\"\s*\{(.*?)\}',t,re.S)
+print(' '.join(sorted({v for _,v in re.findall(r'\"(\d+)\"\s+\"(\d+)\"',m.group(1))}-{'228980'})) if m else '')")
+  [ -z "$FOREIGN" ] && ok "no borrowed depots (228980 = Steam redists, normal)" || no "depots borrowed from app(s): $FOREIGN"
+  [ "$OWNER" = "$CUR" ] && ok "you own this copy" || no "LastOwner=$OWNER, not you - borrowed copy"
+fi
+
+echo "== 4. game folder =="
+G="$S/steamapps/common/SCP Secret Laboratory"
+N=$(find "$G" -type f \( -iname '*.id?' -o -iname '*.nam' -o -iname '*.til' -o -iname '*.i64' -o -iname '*.idb' \) 2>/dev/null | wc -l)
+[ "$N" = "0" ] && ok "no IDA files next to GameAssembly.dll" || no "$N reverse-engineering files in the game folder"
+
+echo "== 5. overlay =="
+P=$(pgrep -af 'scpsl-esp|acctl' 2>/dev/null | grep -v sl-preflight | grep -v snapshot-zsh | wc -l)
+[ "$P" = "0" ] && ok "nothing attached" || no "$P overlay/acctl process(es) running"
+
+echo "== 6. disk serials =="
+R=$(cat /sys/block/nvme0n1/device/serial 2>/dev/null)
+F=$(/home/noras/.local/bin/sl-fakeid cat /sys/block/nvme0n1/device/serial 2>/dev/null)
+if [ -z "$F" ]; then no "sl-fakeid not working"
+elif [ "$F" = "$R" ]; then no "shim not masking - real serial still visible ($R)"
+else ok "masked: $R -> $F"; fi
+LO=$(grep -oP '"LaunchOptions"\s+"\K[^"]*' /home/noras/.local/share/Steam/userdata/*/config/localconfig.vdf 2>/dev/null | grep -c sl-fakeid)
+[ "$LO" -gt 0 ] && ok "sl-fakeid is in a Steam launch option" || no "add to SL launch options: /home/noras/.local/bin/sl-fakeid %command%"
+
+echo
+[ "$FAIL" = "0" ] && echo -e "\033[32mclear to launch\033[0m" || echo -e "\033[31mdo NOT launch\033[0m"
+exit $FAIL

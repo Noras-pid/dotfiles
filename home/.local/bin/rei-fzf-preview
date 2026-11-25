@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+if [[ -d $1 ]]; then
+    exec eza --tree --level=2 --color=always --icons=always -- "$1"
+elif [[ -f $1 ]]; then
+    exec bat --color=always --style=numbers --line-range=:200 -- "$1"
+fi

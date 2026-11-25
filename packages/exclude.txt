@@ -1,0 +1,7 @@
+caelestia-cli
+caelestia-shell
+deepseek-harness
+shikiwatch-bin
+steam-tools-ng
+net.armatik.Kitsune
+slssteam

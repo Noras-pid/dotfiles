@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=OpenBullet 2
+Comment=OpenBullet 2 local web interface
+Exec=/home/noras/.local/bin/openbullet2
+Icon=applications-development
+Terminal=false
+Categories=Development;

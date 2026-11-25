@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Runs a command with fake disk serials visible to it.
+# Steam launch options:  sl-fakeid %command%
+# Regenerate the identity:  sl-fakeid --new
+D="$HOME/.local/share/sl-fakeid"
+mkdir -p "$D"
+
+gen(){
+  rand(){ tr -dc 'A-Z0-9' </dev/urandom | head -c "$1"; }
+  printf 'P320WCBB%s\n' "$(tr -dc '0-9' </dev/urandom | head -c 11)" > "$D/nvme0n1.serial"
+  printf 'nvme.10ec-%s-50617472696\n' "$(tr -dc 'a-f0-9' </dev/urandom | head -c 38)" > "$D/nvme0n1.wwid"
+  printf 'WD-WX%s\n' "$(rand 10)" > "$D/sda.serial"
+  printf 'naa.5%s\n' "$(tr -dc 'a-f0-9' </dev/urandom | head -c 15)" > "$D/sda.wwid"
+  # fake ARP table: same gateway IP (the game may cross-check the route), new router MAC
+  hex(){ printf '%02x' $((RANDOM%256)); }
+  GW=$(ip route | awk '/^default/{print $3; exit}'); GW=${GW:-192.168.1.1}
+  DEV=$(ip route | awk '/^default/{print $5; exit}'); DEV=${DEV:-eth0}
+  MAC="$(hex):$(hex):$(hex):$(hex):$(hex):$(hex)"
+  { echo "IP address       HW type     Flags       HW address            Mask     Device"
+    printf '%-16s 0x1         0x2         %s     *        %s\n' "$GW" "$MAC" "$DEV"
+  } > "$D/arp"
+  tr -dc 'a-f0-9' </dev/urandom | head -c 32 > "$D/machine-id"; echo >> "$D/machine-id"
+  echo "  gateway MAC     $MAC"
+  echo "  machine-id      $(cat "$D/machine-id")"
+  printf 'desktop-%s\n' "$(tr -dc 'a-z0-9' </dev/urandom | head -c 7)" > "$D/hostname"
+  echo "  hostname        $(cat "$D/hostname")"
+  echo "new identity:"; for f in "$D"/*.serial; do echo "  $(basename "$f" .serial)  $(cat "$f")"; done
+}
+
+[ "$1" = "--new" ] && { gen; exit 0; }
+[ "$1" = "--show" ] && { for f in "$D"/*.serial "$D"/*.wwid; do [ -f "$f" ] && echo "  $(basename "$f")  $(cat "$f")"; done; exit 0; }
+[ -f "$D/nvme0n1.serial" ] || gen >/dev/null
+
+[ -f "$D/arp" ] || gen >/dev/null
+export SL_FAKE_DIR="$D"
+# the Linux username reaches the game through Wine's env passthrough
+export USER=user LOGNAME=user
+
+/home/noras/.local/bin/sl-fakename >/dev/null 2>&1
+# $LIB is expanded by the dynamic loader, so each process gets the matching build
+L='/home/noras/.local/lib/sl-fake/$LIB/sl-fakeserial.so'
+export LD_PRELOAD="${LD_PRELOAD:+$LD_PRELOAD:}$L"
+exec "$@"

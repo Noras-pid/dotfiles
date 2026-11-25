@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Open an archive as a folder in Thunar, like a zip folder in Windows Explorer:
+# gvfs mounts it read-only through libarchive (zip, 7z, rar, tar.*, iso...), so
+# Ctrl+C on files inside and Ctrl+V anywhere works. To change the archive itself
+# (add, delete, password) use Ark: right-click > Open in Ark.
+set -euo pipefail
+[[ $# -ge 1 ]] || { echo "usage: archive-folder <archive>" >&2; exit 2; }
+f=$(realpath -- "$1")
+# gvfs keys the mount by the file URI escaped twice more (a space is %252520)
+uri="archive://$(python3 -c 'import sys, pathlib, urllib.parse as u
+q = pathlib.Path(sys.argv[1]).as_uri()
+print(u.quote(u.quote(q, safe=""), safe=""))' "$f")"
+if ! gio info "$uri/" >/dev/null 2>&1 && ! gio mount "$uri" 2>/dev/null; then
+    notify-send -a Archive -i ark "Opening in Ark" "$(basename -- "$f") can't be browsed as a folder"
+    exec ark -- "$f"
+fi
+exec thunar "$uri/"

@@ -1,0 +1,77 @@
+# Cassini — a hued space theme sampled from its wallpaper: a rust-brown
+# ringed giant in deep warm-black space, its rings lit ice-teal, a slate
+# nebula behind. Surfaces are the space black (a faint warm tint), the accent
+# is the ring's ice-teal, copper from the planet's lit edge is the warm
+# second colour, and the nebula gives blue and violet.
+
+name = "Rei Ayanami"
+mode = "dark"
+hued = true
+bar = "floating"
+
+[colors]
+bg0 = "#0b1022"
+bg1 = "#10192d"
+bg2 = "#17243a"
+bg3 = "#293b55"
+bg4 = "#38516b"
+
+fg = "#e1e9f4"
+accent_bright = "#9ccfff"
+accent_light = "#c1e2ff"
+accent_mid = "#9caec5"
+accent_dim = "#71869f"
+
+active = "#9ccfff"
+hover = "#e66a7d"
+warning = "#d6c791"
+critical = "#e66a7d"
+
+grey0 = "#34475d"
+grey1 = "#667990"
+grey2 = "#92a5bb"
+
+red = "#e66a7d"
+orange = "#e6a27d"
+yellow = "#d6c791"
+green = "#95d5a7"
+aqua = "#8bd6ef"
+blue = "#9ccfff"
+purple = "#c0a8df"
+
+[terminal]
+background = "#0b1022"
+foreground = "#e1e9f4"
+cursor = "#9ccfff"
+selection_background = "#324478"
+selection_foreground = "#e1e9f4"
+color0 = "#17243a"
+color1 = "#e66a7d"
+color2 = "#95d5a7"
+color3 = "#d6c791"
+color4 = "#9ccfff"
+color5 = "#c0a8df"
+color6 = "#8bd6ef"
+color7 = "#c3d1df"
+color8 = "#53647a"
+color9 = "#ff9dac"
+color10 = "#a7dcb6"
+color11 = "#e9d8ab"
+color12 = "#b9dcff"
+color13 = "#dcc5ed"
+color14 = "#a6e5f7"
+color15 = "#f2f6fc"
+
+[git]
+added = "#95d5a7"
+modified = "#d6c791"
+deleted = "#e66a7d"
+renamed = "#9ccfff"
+conflict = "#e6a27d"
+
+[apps]
+gtk_theme = "adw-gtk3-dark"
+icon_theme = "Papirus-Dark-breeze"
+cursor_theme = "Bibata-Modern-Ice"
+qt_style = "Fusion"
+nvim_colorscheme = "aether"

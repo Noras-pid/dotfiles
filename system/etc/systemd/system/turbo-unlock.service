@@ -1,0 +1,16 @@
+[Unit]
+Description=Keep CPU Turbo Boost on at 3.1 GHz (Acer Nitro 5 without battery)
+# a watcher, not a one-shot: the firmware/EC can lock turbo again under load,
+# on resume or on adapter events, and the loop undoes that within 2 s
+After=multi-user.target
+
+[Service]
+Type=simple
+Environment=MAX_MHZ=3100 GAME_PL1=35 GAME_PL2=40 INTERVAL=2
+ExecStart=/usr/local/bin/turbo-unlock watch
+Restart=always
+RestartSec=2
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

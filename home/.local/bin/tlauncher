@@ -1,0 +1,2 @@
+#!/bin/sh
+cd "/home/noras/.local/share/tlauncher" && exec "/home/noras/.local/share/tlauncher/lib/jvm/jre/bin/java" -Dfile.encoding=UTF8 -jar "/home/noras/.local/share/tlauncher/starter-core.jar" "$@"
